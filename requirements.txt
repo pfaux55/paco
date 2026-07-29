@@ -1,0 +1,6 @@
+PySide6==6.10.2
+requests>=2.31,<3
+vosk==0.3.45
+piper-tts==1.4.1
+miniaudio==1.61
+pypdf>=6.14,<7
