@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from io import BytesIO
 import math
+from pathlib import Path
 import struct
 import wave
 
@@ -19,6 +20,8 @@ from PySide6.QtCore import (
 )
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
+
+from local_matrix_assistant.ui.animated import AnimatedSvgWidget
 
 
 def build_startup_chime() -> bytes:
@@ -92,6 +95,18 @@ class StartupOverlay(QWidget):
         self._status.setObjectName("startupStatus")
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        pulse_path = Path(__file__).resolve().parents[1] / "assets" / "svg-spinners" / "270-ring-with-bg.svg"
+        self._pulse_indicator = AnimatedSvgWidget(
+            pulse_path,
+            size=160,
+            accessible_name="Jarvis startup in progress",
+            parent=self,
+        )
+        self._pulse_opacity = QGraphicsOpacityEffect(self._pulse_indicator)
+        self._pulse_indicator.setGraphicsEffect(self._pulse_opacity)
+        self._pulse_opacity.setOpacity(0.0)
+        self._pulse_indicator.lower()
+
         self._title_opacity = QGraphicsOpacityEffect(self._title)
         self._eyebrow_opacity = QGraphicsOpacityEffect(self._eyebrow)
         self._status_opacity = QGraphicsOpacityEffect(self._status)
@@ -118,6 +133,7 @@ class StartupOverlay(QWidget):
 
     def set_reveal_progress(self, value: float) -> None:
         self._reveal_progress = max(0.0, min(1.0, value))
+        self._sync_pulse_opacity()
         self._update_label_geometry()
         self.update()
 
@@ -128,6 +144,7 @@ class StartupOverlay(QWidget):
 
     def set_overlay_opacity(self, value: float) -> None:
         self._overlay_opacity = max(0.0, min(1.0, value))
+        self._sync_pulse_opacity()
         self.update()
 
     overlay_opacity = Property(float, get_overlay_opacity, set_overlay_opacity)
@@ -193,13 +210,7 @@ class StartupOverlay(QWidget):
         energy = min(1.0, self._intro_progress * 1.2)
         pulse = (math.sin(self._intro_progress * math.pi * 6.0) * 0.5 + 0.5) * energy
 
-        outer_radius = base_radius * (0.9 + (0.38 * energy))
         inner_radius = base_radius * (0.48 + (0.16 * pulse))
-
-        for scale, alpha in ((1.28, 0.15), (1.0, 0.32), (0.72, 0.58)):
-            pen = QPen(QColor(96, 255, 170, int(255 * alpha * (1.0 - self._reveal_progress))), 2)
-            painter.setPen(pen)
-            painter.drawEllipse(center, int(outer_radius * scale), int(outer_radius * scale))
 
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(80, 255, 152, int(120 * energy)))
@@ -335,3 +346,12 @@ class StartupOverlay(QWidget):
         self._eyebrow.setGeometry(QRect(0, title_top, rect.width(), 28))
         self._title.setGeometry(QRect(0, title_top + 26, rect.width(), 48))
         self._status.setGeometry(QRect(0, title_top + 82, rect.width(), 28))
+        pulse_center_y = max(120, rect.center().y() - 40)
+        pulse_size = self._pulse_indicator.width()
+        self._pulse_indicator.move(
+            rect.center().x() - (pulse_size // 2),
+            pulse_center_y - (pulse_size // 2),
+        )
+
+    def _sync_pulse_opacity(self) -> None:
+        self._pulse_opacity.setOpacity(self._overlay_opacity * (1.0 - self._reveal_progress))

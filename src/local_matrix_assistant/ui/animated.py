@@ -1,7 +1,71 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation
+from pathlib import Path
+
+from PySide6.QtCore import QByteArray, QEasingCurve, QPropertyAnimation, QRectF, QSize, Qt
+from PySide6.QtGui import QPainter
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QTabWidget, QWidget
+
+
+class AnimatedSvgWidget(QWidget):
+    """Render a bundled, script-free animated SVG without network access."""
+
+    def __init__(
+        self,
+        source: str | Path,
+        *,
+        size: int = 24,
+        accessible_name: str = "Animated status indicator",
+        parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self._source = str(source)
+        self._loaded = True
+        self.setFixedSize(size, size)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self.setAccessibleName(accessible_name)
+        self._renderer = QSvgRenderer(self._source, self)
+        self._renderer.setFramesPerSecond(12)
+        self._renderer.setAnimationEnabled(False)
+        self._renderer.repaintNeeded.connect(self.update)
+
+    @property
+    def is_valid(self) -> bool:
+        return self._renderer.isValid()
+
+    @property
+    def is_animated(self) -> bool:
+        return self._renderer.animated()
+
+    def sizeHint(self) -> QSize:  # type: ignore[override]
+        return self.minimumSizeHint()
+
+    def minimumSizeHint(self) -> QSize:  # type: ignore[override]
+        return self.minimumSize()
+
+    def paintEvent(self, event) -> None:  # type: ignore[override]
+        del event
+        if not self._renderer.isValid():
+            return
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        self._renderer.render(painter, QRectF(self.rect()))
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        if not self._loaded:
+            self._renderer.load(self._source)
+            self._renderer.setFramesPerSecond(12)
+            self._loaded = True
+        self._renderer.setAnimationEnabled(True)
+        super().showEvent(event)
+
+    def hideEvent(self, event) -> None:  # type: ignore[override]
+        self._renderer.setAnimationEnabled(False)
+        if self._loaded and self._renderer.animated():
+            self._renderer.load(QByteArray())
+            self._loaded = False
+        super().hideEvent(event)
 
 
 def fade_in_widget(widget: QWidget, *, duration: int = 260, start: float = 0.18) -> None:

@@ -27,6 +27,7 @@ from local_matrix_assistant.core.constants import MAX_COMPOSER_HEIGHT, MIN_COMPO
 from local_matrix_assistant.core.models import ConversationSummary
 from local_matrix_assistant.services.attachments import AttachmentService, LocalAttachment
 from local_matrix_assistant.ui.animated import fade_in_widget
+from local_matrix_assistant.ui.brand import jarvis_mark
 from local_matrix_assistant.ui.inputs import NoWheelComboBox
 from local_matrix_assistant.ui.status_panel import StatusPanel
 from local_matrix_assistant.ui.voice_only_panel import VoiceOnlyPanel
@@ -140,7 +141,14 @@ class ChatPanel(QWidget):
         chat_screen_layout = QVBoxLayout(self.chat_screen)
         chat_screen_layout.setContentsMargins(0, 0, 0, 0)
         chat_screen_layout.setSpacing(18)
-        chat_screen_layout.addWidget(self._header_label("Conversation Log"))
+        chat_header = QHBoxLayout()
+        chat_header.setContentsMargins(0, 0, 0, 0)
+        chat_header.setSpacing(8)
+        self.jarvis_mark = jarvis_mark(20, accessible_name="Jarvis chat")
+        chat_header.addWidget(self.jarvis_mark)
+        chat_header.addWidget(self._header_label("Conversation Log"))
+        chat_header.addStretch(1)
+        chat_screen_layout.addLayout(chat_header)
 
         self.chat_scroll = QScrollArea()
         self.chat_scroll.setObjectName("conversationScroll")

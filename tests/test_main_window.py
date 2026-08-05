@@ -28,6 +28,7 @@ from local_matrix_assistant.services.model_router import ModelRouter, ModelSelec
 from local_matrix_assistant.ui.chat_panel import ChatPanel
 from local_matrix_assistant.ui.main_window import MainWindow
 from local_matrix_assistant.ui.settings_panel import SettingsPanel
+from local_matrix_assistant.ui.theme import stylesheet_for_theme
 from local_matrix_assistant.ui.voice_panel import VoicePanel
 
 
@@ -155,6 +156,41 @@ class MainWindowStateTests(unittest.TestCase):
         self.assertEqual(0, scroll.horizontalScrollBar().maximum())
         self.assertLessEqual(panel.model_install_combo.width(), scroll.viewport().width())
         self.assertGreater(panel.model_install_button.width(), 0)
+        panel.close()
+
+    def test_theme_selector_applies_and_persists_the_selected_theme(self) -> None:
+        config = build_config()
+        window = MainWindow.__new__(MainWindow)
+        window.config = config
+        window.settings_panel = SettingsPanel(config)
+        window._set_activity = lambda _text: None  # type: ignore[method-assign]
+
+        def fake_update_config(**changes: str) -> bool:
+            window.config = replace(window.config, **changes)
+            return True
+
+        window._update_config = fake_update_config  # type: ignore[method-assign]
+        window.settings_panel.theme_combo.setCurrentIndex(
+            window.settings_panel.theme_combo.findData("ocean")
+        )
+        window._on_theme_changed()
+
+        self.assertEqual("ocean", window.config.theme)
+        self.assertEqual(stylesheet_for_theme("ocean"), self.app.styleSheet())
+        window.settings_panel.close()
+
+    def test_theme_selector_shows_previews_and_includes_red(self) -> None:
+        panel = SettingsPanel(build_config())
+        red_index = panel.theme_combo.findData("red")
+
+        self.assertGreaterEqual(red_index, 0)
+        self.assertFalse(panel.theme_combo.itemIcon(red_index).isNull())
+        self.assertTrue(
+            all(
+                not panel.theme_combo.itemIcon(index).isNull()
+                for index in range(panel.theme_combo.count())
+            )
+        )
         panel.close()
 
     def test_auto_routing_updates_composer_and_coding_system_prompt(self) -> None:

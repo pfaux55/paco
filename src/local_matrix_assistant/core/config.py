@@ -172,6 +172,8 @@ def _coerce_model_profile(data: dict) -> None:
 
 
 def _coerce_ui_preferences(data: dict) -> None:
+    theme = data.get("theme", "matrix")
+    data["theme"] = theme if theme in {"matrix", "ocean", "violet", "amber", "red"} else "matrix"
     data["sidebar_collapsed"] = data.get("sidebar_collapsed") is True
     data["continuous_voice_enabled"] = data.get("continuous_voice_enabled") is True
     active_page = data.get("active_page")
@@ -281,6 +283,7 @@ class AppConfig:
     active_page: int = 0
     last_conversation_id: str = ""
     chat_drafts: dict[str, str] = field(default_factory=dict)
+    theme: str = "matrix"
 
     @classmethod
     def defaults(cls, paths: AppPaths) -> "AppConfig":
@@ -321,6 +324,7 @@ class AppConfig:
             active_page=0,
             last_conversation_id="",
             chat_drafts={},
+            theme="matrix",
         )
 
     @classmethod

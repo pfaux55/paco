@@ -22,20 +22,9 @@ from PySide6.QtWidgets import (
 
 from local_matrix_assistant.core.constants import APP_NAME
 from local_matrix_assistant.core.models import ChatMessage
+from local_matrix_assistant.ui.brand import jarvis_mark
 from local_matrix_assistant.services.attachments import AttachmentService
 from local_matrix_assistant.ui.code_highlighter import CodeSyntaxHighlighter
-
-
-class StatusBadge(QLabel):
-    def __init__(self, label: str) -> None:
-        super().__init__(label)
-        self.setObjectName("statusBadgeWarn")
-
-    def set_state(self, ok: bool, text: str) -> None:
-        self.setObjectName("statusBadgeOk" if ok else "statusBadgeWarn")
-        self.setText(text)
-        self.style().unpolish(self)
-        self.style().polish(self)
 
 
 MARKUP_PATTERNS = (
@@ -297,6 +286,9 @@ class MessageBubble(QFrame):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
 
+        self.role_icon = jarvis_mark(16, accessible_name="Jarvis message")
+        header_layout.addWidget(self.role_icon)
+
         self.role_label = QLabel("")
         self.role_label.setObjectName("messageRole")
         header_layout.addWidget(self.role_label)
@@ -427,6 +419,7 @@ class MessageBubble(QFrame):
         self._link_notice_timer.stop()
         self.link_notice.hide()
         is_user = message.role == "user"
+        self.role_icon.setVisible(not is_user)
         self.setObjectName("messageUser" if is_user else "messageAssistant")
         role_label = "USER" if is_user else APP_NAME.upper()
         self.role_label.setText(f"{role_label}  {message.timestamp}")

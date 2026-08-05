@@ -52,6 +52,14 @@ class WidgetTests(unittest.TestCase):
         )
         self.assertEqual(Qt.TextFormat.PlainText, bubble.body_label.textFormat())
 
+    def test_jarvis_mark_only_appears_on_assistant_messages(self) -> None:
+        assistant = MessageBubble(ChatMessage("assistant", "Ready", "now"))
+        user = MessageBubble(ChatMessage("user", "Hello", "now"))
+
+        self.assertFalse(assistant.role_icon.pixmap().isNull())
+        self.assertFalse(assistant.role_icon.isHidden())
+        self.assertTrue(user.role_icon.isHidden())
+
     def test_fenced_content_is_split_without_losing_surrounding_markdown(self) -> None:
         segments = split_fenced_content("Before\n\n```python\nprint('ready')\n```\n\nAfter")
 

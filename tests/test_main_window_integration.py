@@ -1304,8 +1304,6 @@ class MainWindowIntegrationTests(unittest.TestCase):
             self.assertFalse(window.page_stack.isHidden())
             self.assertTrue(window.chat_panel._compact_mode)
             self.assertEqual(12, window.root_layout.contentsMargins().left())
-            self.assertTrue(window.mic_badge.isHidden())
-            self.assertTrue(window.tts_badge.isHidden())
 
             window.sidebar_toggle_button.click()
             self.assertFalse(window.sidebar.isHidden())

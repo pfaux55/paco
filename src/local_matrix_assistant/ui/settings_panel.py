@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from PySide6.QtCore import QSize
+from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -16,6 +18,7 @@ from local_matrix_assistant.core.config import AppConfig
 from local_matrix_assistant.core.model_catalog import RECOMMENDED_MODELS, RecommendedModel
 from local_matrix_assistant.core.models import ModelPullProgress
 from local_matrix_assistant.ui.inputs import NoWheelComboBox
+from local_matrix_assistant.ui.theme import THEME_OPTIONS, THEME_PREVIEWS
 from local_matrix_assistant.ui.status_panel import StatusPanel
 
 
@@ -42,6 +45,20 @@ class SettingsPanel(QWidget):
         settings_header = QLabel("System Controls")
         settings_header.setObjectName("messageRole")
         panel_layout.addWidget(settings_header)
+
+        self.theme_combo = NoWheelComboBox()
+        for theme_id, theme_name in THEME_OPTIONS:
+            self.theme_combo.addItem(self._theme_preview_icon(theme_id), theme_name, theme_id)
+        self.theme_combo.setIconSize(QSize(18, 18))
+        self.theme_combo.setCurrentIndex(
+            max(0, self.theme_combo.findData(config.theme))
+        )
+        panel_layout.addWidget(QLabel("App Theme"))
+        panel_layout.addWidget(self.theme_combo)
+        theme_note = QLabel("Changes the app colour immediately and is remembered for future launches.")
+        theme_note.setObjectName("statusLabel")
+        theme_note.setWordWrap(True)
+        panel_layout.addWidget(theme_note)
 
         self.ollama_host_input = QLineEdit(config.ollama_base_url)
         self.ollama_host_input.setPlaceholderText("Ollama base URL")
@@ -140,6 +157,24 @@ class SettingsPanel(QWidget):
         settings_container_layout.setContentsMargins(0, 0, 0, 0)
         settings_container_layout.addWidget(panel)
         layout.addWidget(settings_scroll)
+
+    @staticmethod
+    def _theme_preview_icon(theme_id: str) -> QIcon:
+        background, accent = THEME_PREVIEWS[theme_id]
+        preview = QPixmap(18, 18)
+        preview.fill(QColor("transparent"))
+        painter = QPainter(preview)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        circle = QPainterPath()
+        circle.addEllipse(1, 1, 16, 16)
+        painter.setClipPath(circle)
+        painter.fillRect(0, 0, 9, 18, QColor(background))
+        painter.fillRect(9, 0, 9, 18, QColor(accent))
+        painter.setClipping(False)
+        painter.setPen(QColor("#718078"))
+        painter.drawEllipse(1, 1, 16, 16)
+        painter.end()
+        return QIcon(preview)
 
     def selected_recommended_model(self) -> RecommendedModel | None:
         selected_name = str(self.model_install_combo.currentData() or "")

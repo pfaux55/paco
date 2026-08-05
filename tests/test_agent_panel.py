@@ -38,6 +38,10 @@ class AgentPanelTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.panel.close()
 
+    def test_agent_header_uses_jarvis_mark(self) -> None:
+        self.assertFalse(self.panel.jarvis_mark.pixmap().isNull())
+        self.assertEqual("Jarvis agent", self.panel.jarvis_mark.accessibleName())
+
     def test_run_button_tracks_command_input(self) -> None:
         self.assertFalse(self.panel.run_button.isEnabled())
         self.panel.command_input.setPlainText("create file notes.txt")

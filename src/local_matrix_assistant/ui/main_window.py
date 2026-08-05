@@ -24,6 +24,7 @@ from local_matrix_assistant.services.workspace_actions import WorkspaceActionSer
 from local_matrix_assistant.services.workspace_analysis import WorkspaceAnalysisService
 from local_matrix_assistant.services.word_documents import WordDocumentService
 from local_matrix_assistant.ui.agent_panel import AgentPanel
+from local_matrix_assistant.ui.brand import jarvis_icon, jarvis_mark
 from local_matrix_assistant.ui.chat_panel import ChatPanel
 from local_matrix_assistant.ui.main_window_agent import AgentWindowMixin
 from local_matrix_assistant.ui.main_window_chat import ChatWindowMixin
@@ -34,8 +35,9 @@ from local_matrix_assistant.ui.shortcut_help import ShortcutHelpDialog
 from local_matrix_assistant.ui.startup_sequence import StartupSequence
 from local_matrix_assistant.ui.system_notice import SystemNoticeBar
 from local_matrix_assistant.ui.task_runner import TaskRunner
+from local_matrix_assistant.ui.theme import stylesheet_for_theme
 from local_matrix_assistant.ui.voice_panel import VoicePanel
-from local_matrix_assistant.ui.widgets import MessageBubble, StatusBadge
+from local_matrix_assistant.ui.widgets import MessageBubble
 from local_matrix_assistant.ui.workers import StreamWorker
 
 
@@ -44,8 +46,12 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
     def __init__(self, paths: AppPaths, config: AppConfig) -> None:
         super().__init__()
+        self.setWindowIcon(jarvis_icon())
         self.paths = paths
         self.config = config
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(stylesheet_for_theme(config.theme))
         self.history_store = HistoryStore(paths.chats_dir, paths.history_file)
         self.agent_history_store = AgentHistoryStore(paths.data_dir / "agent_history.json")
         initial_conversation = self.history_store.load_preferred_or_latest(
@@ -283,9 +289,8 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.sidebar_toggle_button.setAccessibleName("Toggle navigation and chat history")
         header_layout.addWidget(self.sidebar_toggle_button)
 
-        logo = QLabel("")
+        logo = jarvis_mark(34, accessible_name="Jarvis application")
         logo.setObjectName("appLogo")
-        logo.setFixedSize(34, 34)
         header_layout.addWidget(logo)
 
         self.header_title = QLabel(APP_TITLE)
@@ -298,15 +303,6 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.shortcuts_button.setToolTip("Show keyboard shortcuts (Ctrl+/)")
         header_layout.addWidget(self.shortcuts_button)
 
-        badges = QHBoxLayout()
-        badges.setSpacing(10)
-        self.ollama_badge = StatusBadge("Ollama")
-        self.model_badge = StatusBadge("Model")
-        self.mic_badge = StatusBadge("Mic")
-        self.tts_badge = StatusBadge("Voice")
-        for badge in (self.ollama_badge, self.model_badge, self.mic_badge, self.tts_badge):
-            badges.addWidget(badge)
-        header_layout.addLayout(badges)
         return header_panel
 
     def _build_sidebar(self) -> QWidget:
@@ -406,10 +402,8 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         idle_layout = QHBoxLayout(self.sidebar_activity_card)
         idle_layout.setContentsMargins(14, 12, 14, 12)
         idle_layout.setSpacing(10)
-        idle_dot = QLabel("J")
+        idle_dot = jarvis_mark(34, accessible_name="Jarvis status")
         idle_dot.setObjectName("idleAvatar")
-        idle_dot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        idle_dot.setFixedSize(34, 34)
         idle_layout.addWidget(idle_dot)
         idle_text_col = QVBoxLayout()
         idle_text_col.setSpacing(2)
@@ -485,9 +479,6 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.chat_panel.set_compact_mode(compact)
 
         self.shortcuts_button.setVisible(available_width >= 940)
-        self.model_badge.setVisible(available_width >= 900)
-        self.mic_badge.setVisible(not compact)
-        self.tts_badge.setVisible(not compact)
         self.sidebar_toggle_button.setChecked(sidebar_visible)
         self.sidebar_toggle_button.setText("Hide Menu" if sidebar_visible else "Menu")
         action = "Hide" if sidebar_visible else "Show"
@@ -628,6 +619,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
         self.settings_panel.refresh_button.clicked.connect(self.refresh_status)
         self.settings_panel.save_button.clicked.connect(self._save_settings)
+        self.settings_panel.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         self.settings_panel.model_combo.currentTextChanged.connect(self._on_model_changed)
         self.settings_panel.model_install_button.clicked.connect(self._start_model_install)
         self.settings_panel.model_cancel_button.clicked.connect(self._cancel_model_install)

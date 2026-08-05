@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QElapsedTimer, QTimer, Signal
 from PySide6.QtWidgets import (
     QFrame,
@@ -10,7 +12,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from local_matrix_assistant.ui.animated import fade_in_widget
+from local_matrix_assistant.ui.animated import AnimatedSvgWidget, fade_in_widget
 
 
 class AgentProgressCard(QFrame):
@@ -27,6 +29,14 @@ class AgentProgressCard(QFrame):
 
         header = QHBoxLayout()
         header.setSpacing(9)
+        spinner_path = Path(__file__).resolve().parents[1] / "assets" / "svg-spinners" / "180-ring.svg"
+        self.activity_indicator = AnimatedSvgWidget(
+            spinner_path,
+            size=22,
+            accessible_name="Agent task running",
+        )
+        self.activity_indicator.setVisible(False)
+        header.addWidget(self.activity_indicator)
         self.title_label = QLabel("Agent task")
         self.title_label.setObjectName("agentProgressTitle")
         header.addWidget(self.title_label)
@@ -84,6 +94,7 @@ class AgentProgressCard(QFrame):
         self.cancel_button.setEnabled(True)
         self.cancel_button.setVisible(True)
         self.progress_bar.setRange(0, 0)
+        self.activity_indicator.setVisible(True)
         self._set_state("running", "RUNNING")
         self._elapsed.start()
         self.elapsed_label.setText("0:00 elapsed")
@@ -111,6 +122,7 @@ class AgentProgressCard(QFrame):
             return
         self._tick_timer.stop()
         self._update_elapsed()
+        self.activity_indicator.setVisible(False)
         self.cancel_button.setVisible(False)
         if self.task_state == "running" and not self.cancel_pending:
             self.phase_label.setText("Finalizing the result...")
@@ -135,6 +147,7 @@ class AgentProgressCard(QFrame):
         self._started = False
         self.cancel_pending = False
         self.cancel_button.setVisible(False)
+        self.activity_indicator.setVisible(False)
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
         self._set_state("idle", "IDLE")

@@ -681,9 +681,6 @@ class ChatWindowMixin:
         )
         self._active_model_selection = selection
         self._update_model_hint(selection)
-        model_badge = getattr(self, "model_badge", None)
-        if model_badge is not None and selection.model:
-            model_badge.set_state(not available or selection.model in available, selection.model)
         return selection
 
     def _prepare_request_messages(

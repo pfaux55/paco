@@ -224,6 +224,22 @@ class ConfigTests(unittest.TestCase):
             paths.settings_file.write_text('{"sidebar_collapsed": "yes"}', encoding="utf-8")
             self.assertFalse(AppConfig.load(paths).sidebar_collapsed)
 
+    def test_theme_round_trips_and_invalid_values_fall_back_to_matrix(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_paths(Path(tmp))
+            config = AppConfig.defaults(paths)
+            config.theme = "violet"
+            config.save(paths)
+
+            self.assertEqual("violet", AppConfig.load(paths).theme)
+
+            config.theme = "red"
+            config.save(paths)
+            self.assertEqual("red", AppConfig.load(paths).theme)
+
+            paths.settings_file.write_text('{"theme": "unknown"}', encoding="utf-8")
+            self.assertEqual("matrix", AppConfig.load(paths).theme)
+
     def test_load_and_save_preserves_preferred_input_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

@@ -3,10 +3,13 @@ from __future__ import annotations
 from dataclasses import replace
 from functools import partial
 
+from PySide6.QtWidgets import QApplication
+
 from local_matrix_assistant.core.constants import DEFAULT_ACTIVITY
 from local_matrix_assistant.core.model_catalog import RECOMMENDED_MODEL_NAMES
 from local_matrix_assistant.core.models import ModelPullProgress, ModelPullResult, StatusSnapshot
 from local_matrix_assistant.ui.workers import FunctionWorker, StreamWorker
+from local_matrix_assistant.ui.theme import normalize_theme, stylesheet_for_theme
 
 
 class SettingsStatusWindowMixin:
@@ -37,15 +40,6 @@ class SettingsStatusWindowMixin:
         )
         self._last_status_snapshot = payload
 
-        self.ollama_badge.set_state(payload.ollama_connected, "Ollama Online" if payload.ollama_connected else "Ollama Offline")
-        self.model_badge.set_state(payload.model_ready, payload.model_name or "No Model")
-        mic_text = "Mic Muted" if payload.mic_available and self.config.microphone_muted else (
-            "Mic Ready" if payload.mic_available else "Mic Missing"
-        )
-        self.mic_badge.set_state(payload.mic_available, mic_text)
-        voice_ok = payload.stt_ready and payload.tts_ready and payload.output_available
-        self.tts_badge.set_state(voice_ok, "Voice Ready" if voice_ok else "Voice Incomplete")
-
         self.chat_panel.status_panel.set_snapshot(payload)
         self.voice_panel.status_panel.set_snapshot(payload)
         self.settings_panel.status_panel.set_snapshot(payload)
@@ -69,6 +63,7 @@ class SettingsStatusWindowMixin:
 
     def _save_settings(self) -> None:
         persisted = self._update_config(
+            theme=normalize_theme(str(self.settings_panel.theme_combo.currentData() or "")),
             ollama_base_url=self.settings_panel.ollama_host_input.text().strip() or self.config.ollama_base_url,
             stt_model_dir=self.settings_panel.stt_path_input.text().strip(),
             tts_model_path=self._selected_voice_model_path() or self.settings_panel.tts_model_input.text().strip(),
@@ -353,6 +348,18 @@ class SettingsStatusWindowMixin:
         self._dismissed_system_notice_key = ""
         self._set_activity(f"Installed local model: {payload.model}")
         self.refresh_status()
+
+    def _on_theme_changed(self) -> None:
+        theme = normalize_theme(str(self.settings_panel.theme_combo.currentData() or ""))
+        if theme == self.config.theme:
+            return
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(stylesheet_for_theme(theme))
+        persisted = self._update_config(theme=theme)
+        self._set_activity(
+            "Theme changed." if persisted else "Theme changed for this session."
+        )
 
     def _on_model_pull_error(self, message: str) -> None:
         model_name = self._active_model_pull_name

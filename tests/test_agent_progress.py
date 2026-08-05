@@ -35,6 +35,9 @@ class AgentProgressCardTests(unittest.TestCase):
         self.card.start("Drafting document", "Planning sections...", "Stop Agent")
 
         self.assertFalse(self.card.isHidden())
+        self.assertFalse(self.card.activity_indicator.isHidden())
+        self.assertTrue(self.card.activity_indicator.is_valid)
+        self.assertTrue(self.card.activity_indicator.is_animated)
         self.assertEqual("running", self.card.task_state)
         self.assertEqual("Drafting document", self.card.title_label.text())
         self.assertEqual("Planning sections...", self.card.phase_label.text())
@@ -74,12 +77,13 @@ class AgentProgressCardTests(unittest.TestCase):
                 self.assertEqual(label, self.card.state_label.text())
                 self.assertEqual(f"{state} result", self.card.phase_label.text())
                 self.assertTrue(self.card.cancel_button.isHidden())
+                self.assertTrue(self.card.activity_indicator.isHidden())
                 self.assertFalse(self.card._tick_timer.isActive())
                 self.assertTrue(self.card._hide_timer.isActive())
 
         self.card._hide_timer.setInterval(10)
         self.card.finish("success", "Done")
-        QTest.qWait(25)
+        QTest.qWait(60)
 
         self.assertTrue(self.card.isHidden())
         self.assertEqual("idle", self.card.task_state)

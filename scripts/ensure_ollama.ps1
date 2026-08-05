@@ -24,11 +24,14 @@ if (Test-Path $ollamaApp) {
     Start-Process -FilePath $ollamaCommand.Source -ArgumentList "serve" -WindowStyle Hidden | Out-Null
 }
 
-Start-Sleep -Seconds 4
-
-try {
-    Invoke-RestMethod -Uri $ollamaUrl -Method Get -TimeoutSec 3 | Out-Null
-} catch {
-    Write-Error "Ollama did not respond on http://127.0.0.1:11434 after startup."
-    exit 1
+for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    Start-Sleep -Milliseconds 500
+    try {
+        Invoke-RestMethod -Uri $ollamaUrl -Method Get -TimeoutSec 2 | Out-Null
+        exit 0
+    } catch {
+    }
 }
+
+Write-Error "Ollama did not respond on http://127.0.0.1:11434 after startup."
+exit 1

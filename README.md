@@ -261,7 +261,7 @@ Conversation summaries are cached in a small corruption-safe local index, so rou
 
 Long conversations reopen at the latest message without constructing every historical message widget. Jarvis renders the newest 40 messages first; use `Load earlier messages` at the top of the conversation to prepend older messages in anchored batches without losing the current reading position. Streaming follows the newest token only while the reader remains near the bottom; scrolling upward preserves the reading position and reveals `Jump to latest`. All messages remain stored locally and available for editing, search, and model context.
 
-The navigation and history sidebar can be hidden with `Ctrl+B`. Its wide-window preference persists between launches. Below 1060px, Jarvis automatically uses a compact layout: navigation opens as a full-width screen, status badges are reduced, and composer controls wrap without clipping.
+  The navigation and history sidebar can be hidden with `Ctrl+B`. Its wide-window preference persists between launches. Below 1060px, Jarvis automatically uses a compact layout: navigation opens as a full-width screen and composer controls wrap without clipping.
 
 Jarvis also restores the last active tab and validated window geometry. Geometry that is malformed or no longer intersects an available monitor is discarded, and the app opens maximized instead of becoming inaccessible off-screen.
 

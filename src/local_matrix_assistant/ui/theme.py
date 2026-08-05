@@ -1,3 +1,33 @@
+from __future__ import annotations
+
+import colorsys
+import re
+
+
+THEME_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("matrix", "Matrix Green"),
+    ("ocean", "Ocean Blue"),
+    ("violet", "Violet"),
+    ("amber", "Amber"),
+    ("red", "Crimson Red"),
+)
+THEME_PREVIEWS = {
+    "matrix": ("#07140d", "#24e081"),
+    "ocean": ("#070d14", "#247ee0"),
+    "violet": ("#100714", "#8a4de0"),
+    "amber": ("#141007", "#e0a224"),
+    "red": ("#140707", "#e04444"),
+}
+DEFAULT_THEME = "matrix"
+_THEME_HUES = {
+    "matrix": 0.39,
+    "ocean": 0.58,
+    "violet": 0.76,
+    "amber": 0.10,
+    "red": 0.0,
+}
+
+
 MATRIX_STYLESHEET = """
 QWidget {
     background: #050c09;
@@ -106,8 +136,8 @@ QLabel#shortcutKey {
     font-weight: 700;
 }
 QLabel#appLogo {
-    background: #0b2015;
-    border: 3px solid #24e081;
+    background: transparent;
+    border: none;
     border-radius: 17px;
 }
 QLabel#title {
@@ -225,10 +255,8 @@ QFrame#idleCard {
     border-radius: 18px;
 }
 QLabel#idleAvatar {
-    background: #123821;
-    border-radius: 17px;
-    color: #31ed8e;
-    font-weight: 800;
+    background: transparent;
+    border: none;
 }
 QLabel#idleTitle {
     color: #f0f7f2;
@@ -984,21 +1012,6 @@ QLabel#startupStatus {
     color: #dce7de;
     font-size: 12px;
 }
-QLabel#statusBadgeOk,
-QLabel#statusBadgeWarn {
-    background: #0b1711;
-    border: 1px solid #1d3e2d;
-    border-radius: 17px;
-    padding: 8px 16px;
-    color: #dce7de;
-    font-weight: 700;
-}
-QLabel#statusBadgeOk {
-    color: #cff7db;
-}
-QLabel#statusBadgeWarn {
-    color: #e8d8aa;
-}
 QLabel#statusStrip {
     background: transparent;
     border: none;
@@ -1208,3 +1221,31 @@ QLabel#statusLabel[voiceRecovery="progress"] {
     padding: 8px 12px;
 }
 """
+
+
+def normalize_theme(theme: str) -> str:
+    """Return a supported theme identifier."""
+    return theme if theme in _THEME_HUES else DEFAULT_THEME
+
+
+def stylesheet_for_theme(theme: str) -> str:
+    """Build the application stylesheet for a selected colour theme."""
+    theme = normalize_theme(theme)
+    if theme == DEFAULT_THEME:
+        return MATRIX_STYLESHEET
+
+    target_hue = _THEME_HUES[theme]
+
+    def recolor(match: re.Match[str]) -> str:
+        color = match.group(1)
+        red, green, blue = (
+            int(color[index:index + 2], 16) / 255 for index in (0, 2, 4)
+        )
+        hue, lightness, saturation = colorsys.rgb_to_hls(red, green, blue)
+        # Matrix surfaces are green-toned. Preserve neutral text and warning/error colours.
+        if saturation < 0.12 or not 0.18 <= hue <= 0.52:
+            return match.group(0)
+        recolored = colorsys.hls_to_rgb(target_hue, lightness, saturation)
+        return "#" + "".join(f"{round(channel * 255):02x}" for channel in recolored)
+
+    return re.sub(r"#([0-9a-fA-F]{6})", recolor, MATRIX_STYLESHEET)

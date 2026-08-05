@@ -35,6 +35,7 @@ from local_matrix_assistant.services.agent_history import (
 from local_matrix_assistant.ui.chat_panel import MessageInput
 from local_matrix_assistant.ui.agent_timeline import AgentEventCard, AgentTimeline
 from local_matrix_assistant.ui.agent_progress import AgentProgressCard
+from local_matrix_assistant.ui.brand import jarvis_mark
 from local_matrix_assistant.ui.diff_review import DiffReviewWidget
 from local_matrix_assistant.ui.status_panel import StatusPanel
 
@@ -110,9 +111,16 @@ class AgentPanel(QWidget):
         panel_layout.setContentsMargins(22, 22, 22, 22)
         panel_layout.setSpacing(16)
 
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)
+        self.jarvis_mark = jarvis_mark(20, accessible_name="Jarvis agent")
+        header_layout.addWidget(self.jarvis_mark)
         header = QLabel("Agent")
         header.setObjectName("messageRole")
-        panel_layout.addWidget(header)
+        header_layout.addWidget(header)
+        header_layout.addStretch(1)
+        panel_layout.addLayout(header_layout)
 
         description = QLabel(
             "Ask naturally, continue the conversation, inspect or change the selected workspace, create files, "

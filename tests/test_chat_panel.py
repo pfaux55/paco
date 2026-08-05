@@ -42,6 +42,10 @@ class ChatPanelTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.panel.close()
 
+    def test_chat_header_uses_jarvis_mark(self) -> None:
+        self.assertFalse(self.panel.jarvis_mark.pixmap().isNull())
+        self.assertEqual("Jarvis chat", self.panel.jarvis_mark.accessibleName())
+
     def test_send_button_tracks_input_presence(self) -> None:
         self.assertFalse(self.panel.send_button.isEnabled())
         self.panel.input_box.setPlainText("hello")
