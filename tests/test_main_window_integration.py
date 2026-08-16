@@ -17,7 +17,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtGui import QColor, QImage, QPalette
 from PySide6.QtWidgets import QApplication, QFileDialog
 from PySide6.QtTest import QTest
 
@@ -1329,6 +1329,41 @@ class MainWindowIntegrationTests(unittest.TestCase):
             window._focus_history_search()
             self.assertFalse(window.sidebar.isHidden())
             self.assertFalse(window.config.sidebar_collapsed)
+            window.close()
+
+    def test_theme_switch_restyles_every_main_page_and_debounces_persistence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_paths(Path(tmp))
+            config = AppConfig.defaults(paths)
+
+            with (
+                patch.object(MainWindow, "refresh_status", lambda _self: None),
+                patch.object(MainWindow, "showMaximized", lambda _self: None),
+                patch.object(AudioRecorder, "list_inputs", lambda _self: []),
+                patch.object(AudioPlayer, "list_outputs", lambda _self: []),
+            ):
+                window = MainWindow(paths, config)
+            window.show()
+            self.app.processEvents()
+            original_background = window.chat_panel.palette().color(QPalette.ColorRole.Window)
+
+            window.settings_panel.theme_combo.setCurrentIndex(
+                window.settings_panel.theme_combo.findData("ocean")
+            )
+            QTest.qWait(350)
+
+            themed_backgrounds = {
+                page.palette().color(QPalette.ColorRole.Window).name()
+                for page in (
+                    window.chat_panel,
+                    window.agent_panel,
+                    window.voice_panel,
+                    window.settings_panel,
+                )
+            }
+            self.assertEqual(1, len(themed_backgrounds))
+            self.assertNotIn(original_background.name(), themed_backgrounds)
+            self.assertEqual("ocean", AppConfig.load(paths).theme)
             window.close()
 
     def test_agent_history_survives_restart_and_clear_removes_saved_record(self) -> None:

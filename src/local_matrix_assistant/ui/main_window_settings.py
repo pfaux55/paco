@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import replace
 from functools import partial
 
-from PySide6.QtWidgets import QApplication
-
 from local_matrix_assistant.core.constants import DEFAULT_ACTIVITY
 from local_matrix_assistant.core.model_catalog import RECOMMENDED_MODEL_NAMES
 from local_matrix_assistant.core.models import ModelPullProgress, ModelPullResult, StatusSnapshot
@@ -62,6 +60,9 @@ class SettingsStatusWindowMixin:
         )
 
     def _save_settings(self) -> None:
+        theme_save_timer = getattr(self, "_theme_save_timer", None)
+        if theme_save_timer is not None:
+            theme_save_timer.stop()
         persisted = self._update_config(
             theme=normalize_theme(str(self.settings_panel.theme_combo.currentData() or "")),
             ollama_base_url=self.settings_panel.ollama_host_input.text().strip() or self.config.ollama_base_url,
@@ -353,13 +354,22 @@ class SettingsStatusWindowMixin:
         theme = normalize_theme(str(self.settings_panel.theme_combo.currentData() or ""))
         if theme == self.config.theme:
             return
-        app = QApplication.instance()
-        if app is not None:
-            app.setStyleSheet(stylesheet_for_theme(theme))
+        self.setStyleSheet(stylesheet_for_theme(theme))
+        self.config = replace(self.config, theme=theme)
+        theme_save_timer = getattr(self, "_theme_save_timer", None)
+        if theme_save_timer is not None:
+            theme_save_timer.start()
+            self._set_activity("Theme changed.")
+            return
         persisted = self._update_config(theme=theme)
         self._set_activity(
             "Theme changed." if persisted else "Theme changed for this session."
         )
+
+    def _save_theme_selection(self) -> None:
+        persisted = self._update_config(theme=self.config.theme)
+        if not persisted:
+            self._set_activity("Theme changed for this session.")
 
     def _on_model_pull_error(self, message: str) -> None:
         model_name = self._active_model_pull_name

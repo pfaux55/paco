@@ -36,14 +36,19 @@ internal static class JarvisLauncher
 
     private sealed class StartupIndicator : Form
     {
+        private const int RuntimeStartupTimeoutMilliseconds = 45000;
+        private const int WindowStartupTimeoutMilliseconds = 45000;
+
         private readonly string projectRoot;
         private readonly string python;
         private readonly string entryPoint;
         private readonly string ollamaStartup;
         private readonly Timer animationTimer;
+        private readonly Timer runtimeStartupTimer;
         private readonly Timer windowActivationTimer;
         private readonly StringBuilder ollamaError = new StringBuilder();
         private Process jarvisProcess;
+        private Process ollamaProcess;
         private System.Threading.EventWaitHandle startupReadyEvent;
         private int activationAttempts;
         private float angle;
@@ -74,6 +79,9 @@ internal static class JarvisLauncher
                 angle = (angle + 5.5f) % 360f;
                 Invalidate();
             };
+
+            runtimeStartupTimer = new Timer { Interval = RuntimeStartupTimeoutMilliseconds };
+            runtimeStartupTimer.Tick += RuntimeStartupTimedOut;
 
             windowActivationTimer = new Timer { Interval = 75 };
             windowActivationTimer.Tick += ActivateJarvisWindow;
@@ -114,7 +122,12 @@ internal static class JarvisLauncher
             if (disposing)
             {
                 animationTimer.Dispose();
+                runtimeStartupTimer.Dispose();
                 windowActivationTimer.Dispose();
+                if (ollamaProcess != null)
+                {
+                    ollamaProcess.Dispose();
+                }
                 if (jarvisProcess != null)
                 {
                     jarvisProcess.Dispose();
@@ -129,7 +142,7 @@ internal static class JarvisLauncher
 
         private void StartRuntime()
         {
-            Process ollama = new Process
+            ollamaProcess = new Process
             {
                 StartInfo = new ProcessStartInfo
                 {
@@ -142,22 +155,26 @@ internal static class JarvisLauncher
                 },
                 EnableRaisingEvents = true
             };
-            ollama.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs eventArgs)
+            ollamaProcess.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs eventArgs)
             {
                 if (!string.IsNullOrWhiteSpace(eventArgs.Data))
                 {
                     ollamaError.AppendLine(eventArgs.Data);
                 }
             };
-            ollama.Exited += delegate
+            ollamaProcess.Exited += delegate
             {
-                BeginInvoke((MethodInvoker)delegate { FinishRuntimeStart(ollama); });
+                if (!IsDisposed && IsHandleCreated)
+                {
+                    BeginInvoke((MethodInvoker)FinishRuntimeStart);
+                }
             };
 
             try
             {
-                ollama.Start();
-                ollama.BeginErrorReadLine();
+                ollamaProcess.Start();
+                ollamaProcess.BeginErrorReadLine();
+                runtimeStartupTimer.Start();
             }
             catch (Exception exception)
             {
@@ -165,11 +182,18 @@ internal static class JarvisLauncher
             }
         }
 
-        private void FinishRuntimeStart(Process ollama)
+        private void FinishRuntimeStart()
         {
-            ollama.WaitForExit();
-            int exitCode = ollama.ExitCode;
-            ollama.Dispose();
+            runtimeStartupTimer.Stop();
+            if (errorShown || ollamaProcess == null)
+            {
+                return;
+            }
+
+            ollamaProcess.WaitForExit();
+            int exitCode = ollamaProcess.ExitCode;
+            ollamaProcess.Dispose();
+            ollamaProcess = null;
             if (exitCode != 0)
             {
                 ShowStartupError("Ollama could not be started.\n\n" + ollamaError.ToString().Trim());
@@ -207,6 +231,11 @@ internal static class JarvisLauncher
         private void ActivateJarvisWindow(object sender, EventArgs eventArgs)
         {
             activationAttempts++;
+            if (jarvisProcess == null || startupReadyEvent == null)
+            {
+                ShowStartupError("Jarvis startup state was lost before its window opened.");
+                return;
+            }
             jarvisProcess.Refresh();
 
             if (startupReadyEvent.WaitOne(0))
@@ -216,16 +245,47 @@ internal static class JarvisLauncher
                 return;
             }
 
-            if (jarvisProcess.HasExited && jarvisProcess.ExitCode != 0)
+            if (jarvisProcess.HasExited)
             {
                 ShowStartupError("Jarvis closed before its window opened.");
                 return;
             }
 
-            if (activationAttempts >= 600)
+            int timeoutAttempts = WindowStartupTimeoutMilliseconds / windowActivationTimer.Interval;
+            if (activationAttempts >= timeoutAttempts)
             {
-                windowActivationTimer.Stop();
-                Close();
+                StopProcess(jarvisProcess);
+                ShowStartupError("Jarvis did not finish opening within 45 seconds. The stalled startup was stopped; try opening Jarvis again.");
+            }
+        }
+
+        private void RuntimeStartupTimedOut(object sender, EventArgs eventArgs)
+        {
+            runtimeStartupTimer.Stop();
+            StopProcess(ollamaProcess);
+            ShowStartupError("The local runtime did not respond within 45 seconds. The stalled startup was stopped; check Ollama and try again.");
+        }
+
+        private static void StopProcess(Process process)
+        {
+            if (process == null)
+            {
+                return;
+            }
+
+            try
+            {
+                process.Refresh();
+                if (!process.HasExited)
+                {
+                    process.Kill();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
             }
         }
 
@@ -237,6 +297,7 @@ internal static class JarvisLauncher
             }
             errorShown = true;
             animationTimer.Stop();
+            runtimeStartupTimer.Stop();
             windowActivationTimer.Stop();
             Hide();
             MessageBox.Show(message, "Jarvis", MessageBoxButtons.OK, MessageBoxIcon.Error);

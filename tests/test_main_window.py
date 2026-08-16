@@ -13,7 +13,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtWidgets import QApplication, QScrollArea
+from PySide6.QtWidgets import QApplication, QMainWindow, QScrollArea
 
 from local_matrix_assistant.core.config import AppConfig
 from local_matrix_assistant.core.models import (
@@ -161,6 +161,7 @@ class MainWindowStateTests(unittest.TestCase):
     def test_theme_selector_applies_and_persists_the_selected_theme(self) -> None:
         config = build_config()
         window = MainWindow.__new__(MainWindow)
+        QMainWindow.__init__(window)
         window.config = config
         window.settings_panel = SettingsPanel(config)
         window._set_activity = lambda _text: None  # type: ignore[method-assign]
@@ -176,8 +177,54 @@ class MainWindowStateTests(unittest.TestCase):
         window._on_theme_changed()
 
         self.assertEqual("ocean", window.config.theme)
-        self.assertEqual(stylesheet_for_theme("ocean"), self.app.styleSheet())
+        self.assertEqual(stylesheet_for_theme("ocean"), window.styleSheet())
         window.settings_panel.close()
+        window.deleteLater()
+
+    def test_theme_persistence_is_debounced_from_visual_application(self) -> None:
+        config = build_config()
+        window = MainWindow.__new__(MainWindow)
+        QMainWindow.__init__(window)
+        window.config = config
+        window.settings_panel = SettingsPanel(config)
+        window._set_activity = lambda _text: None  # type: ignore[method-assign]
+        saved_themes: list[str] = []
+
+        class FakeTimer:
+            def __init__(self) -> None:
+                self.start_calls = 0
+
+            def start(self) -> None:
+                self.start_calls += 1
+
+        timer = FakeTimer()
+        window._theme_save_timer = timer  # type: ignore[assignment]
+
+        def fake_update_config(**changes: str) -> bool:
+            saved_themes.append(changes["theme"])
+            return True
+
+        window._update_config = fake_update_config  # type: ignore[method-assign]
+        window.settings_panel.theme_combo.setCurrentIndex(
+            window.settings_panel.theme_combo.findData("ocean")
+        )
+        window._on_theme_changed()
+
+        self.assertEqual("ocean", window.config.theme)
+        self.assertEqual(1, timer.start_calls)
+        self.assertEqual([], saved_themes)
+
+        window._save_theme_selection()
+
+        self.assertEqual(["ocean"], saved_themes)
+        window.settings_panel.close()
+        window.deleteLater()
+
+    def test_theme_stylesheets_are_cached(self) -> None:
+        first = stylesheet_for_theme("violet")
+        second = stylesheet_for_theme("violet")
+
+        self.assertIs(first, second)
 
     def test_theme_selector_shows_previews_and_includes_red(self) -> None:
         panel = SettingsPanel(build_config())

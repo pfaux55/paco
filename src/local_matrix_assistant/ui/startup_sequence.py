@@ -8,6 +8,8 @@ from local_matrix_assistant.ui.startup_overlay import StartupOverlay, build_star
 
 
 class StartupSequence:
+    startup_timeout_ms = 5000
+
     def __init__(
         self,
         *,
@@ -22,6 +24,11 @@ class StartupSequence:
         self._startup_audio = build_startup_chime()
         self._started = False
 
+        self._startup_timeout = QTimer(root)
+        self._startup_timeout.setSingleShot(True)
+        self._startup_timeout.setInterval(self.startup_timeout_ms)
+        self._startup_timeout.timeout.connect(self._recover_from_timeout)
+
         self.content_opacity = QGraphicsOpacityEffect(content_root)
         self.content_opacity.setOpacity(0.3)
         content_root.setGraphicsEffect(self.content_opacity)
@@ -34,6 +41,7 @@ class StartupSequence:
         if self._started:
             return
         self._started = True
+        self._startup_timeout.start()
         QTimer.singleShot(80, self._start)
 
     def sync_geometry(self) -> None:
@@ -41,6 +49,7 @@ class StartupSequence:
         self.overlay.raise_()
 
     def stop(self) -> None:
+        self._startup_timeout.stop()
         self._startup_player.stop()
         self.overlay.skip()
 
@@ -48,11 +57,18 @@ class StartupSequence:
         self._startup_player.set_output_device_name(output_name)
 
     def _start(self) -> None:
+        if not self._startup_timeout.isActive():
+            return
         self.sync_geometry()
         self.overlay.start(self._play_sound)
         self._animate_content_opacity(0.3, 1.0, 1900)
 
+    def _recover_from_timeout(self) -> None:
+        self.overlay.skip()
+
     def _finish(self) -> None:
+        self._startup_timeout.stop()
+        self._startup_player.stop()
         self.content_opacity.setOpacity(1.0)
         self.overlay.setDisabled(True)
         self.overlay.hide()

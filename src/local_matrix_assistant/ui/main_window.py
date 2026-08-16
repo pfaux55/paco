@@ -49,9 +49,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.setWindowIcon(jarvis_icon())
         self.paths = paths
         self.config = config
-        app = QApplication.instance()
-        if app is not None:
-            app.setStyleSheet(stylesheet_for_theme(config.theme))
+        self.setStyleSheet(stylesheet_for_theme(config.theme))
         self.history_store = HistoryStore(paths.chats_dir, paths.history_file)
         self.agent_history_store = AgentHistoryStore(paths.data_dir / "agent_history.json")
         initial_conversation = self.history_store.load_preferred_or_latest(
@@ -143,6 +141,10 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self._voice_tuning_save_timer.setSingleShot(True)
         self._voice_tuning_save_timer.setInterval(250)
         self._voice_tuning_save_timer.timeout.connect(self._save_voice_tuning)
+        self._theme_save_timer = QTimer(self)
+        self._theme_save_timer.setSingleShot(True)
+        self._theme_save_timer.setInterval(300)
+        self._theme_save_timer.timeout.connect(self._save_theme_selection)
         self._chat_draft_save_timer = QTimer(self)
         self._chat_draft_save_timer.setSingleShot(True)
         self._chat_draft_save_timer.setInterval(600)
@@ -780,6 +782,8 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        if self._theme_save_timer.isActive():
+            self._theme_save_timer.stop()
         if self._chat_draft_save_timer.isActive():
             self._chat_draft_save_timer.stop()
         self._save_current_chat_draft()

@@ -1,6 +1,15 @@
+# Python 3.12+ runtime dependencies.
+# Transitive dependencies (Qt bindings, onnxruntime, cffi, and HTTP libraries)
+# are installed automatically by pip.
 PySide6==6.10.2
-requests>=2.31,<3
+requests>=2.32.5,<3
 vosk==0.3.45
 piper-tts==1.4.1
 miniaudio==1.61
-pypdf>=6.14,<7
+pypdf>=6.14.2,<7
+
+# External prerequisites, installed outside pip:
+# - Windows 10/11 and Python 3.12+
+# - Ollama for Windows, available on PATH, with a supported local model
+# - Vosk and Piper model files downloaded with scripts/download_models.py
+# Optional workspace tooling: Git, Node.js/npm, Rust/Cargo, Ruff or Black, and Prettier.

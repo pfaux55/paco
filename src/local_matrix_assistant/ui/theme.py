@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import colorsys
+from functools import lru_cache
 import re
 
 
@@ -1228,9 +1229,8 @@ def normalize_theme(theme: str) -> str:
     return theme if theme in _THEME_HUES else DEFAULT_THEME
 
 
-def stylesheet_for_theme(theme: str) -> str:
-    """Build the application stylesheet for a selected colour theme."""
-    theme = normalize_theme(theme)
+@lru_cache(maxsize=len(_THEME_HUES))
+def _stylesheet_for_normalized_theme(theme: str) -> str:
     if theme == DEFAULT_THEME:
         return MATRIX_STYLESHEET
 
@@ -1249,3 +1249,8 @@ def stylesheet_for_theme(theme: str) -> str:
         return "#" + "".join(f"{round(channel * 255):02x}" for channel in recolored)
 
     return re.sub(r"#([0-9a-fA-F]{6})", recolor, MATRIX_STYLESHEET)
+
+
+def stylesheet_for_theme(theme: str) -> str:
+    """Return a cached application stylesheet for a selected colour theme."""
+    return _stylesheet_for_normalized_theme(normalize_theme(theme))
