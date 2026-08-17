@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
-import re
 
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
 from local_matrix_assistant.services.workspace_actions import WorkspaceBatchEditPreview, WorkspaceEditPreview
 
 
@@ -54,7 +53,10 @@ class WorkspaceFixService:
     @classmethod
     def parse_plan(cls, response: str, allowed_files: tuple[str, ...]) -> WorkspaceFixPlan:
         payload = cls._json_payload(response)
-        summary = cls._clean_text(payload.get("summary"), "The reasoning model did not provide a fix summary.")
+        summary = clean_model_text(
+            payload.get("summary"),
+            "The reasoning model did not provide a fix summary.",
+        )
         if len(summary) > cls.max_summary_characters:
             summary = summary[: cls.max_summary_characters].rstrip() + "..."
         raw_files = payload.get("files")
@@ -69,7 +71,7 @@ class WorkspaceFixService:
         for item in raw_files:
             if not isinstance(item, dict):
                 raise DesktopActionError("The reasoning model returned an invalid fix file entry.")
-            requested = cls._clean_text(item.get("path"), "A proposed fix file path is missing.")
+            requested = clean_model_text(item.get("path"), "A proposed fix file path is missing.")
             canonical = allowed.get(requested.replace("\\", "/").casefold())
             if canonical is None:
                 raise DesktopActionError(
@@ -79,7 +81,7 @@ class WorkspaceFixService:
             if key in seen:
                 raise DesktopActionError(f"The reasoning model selected {canonical} more than once.")
             seen.add(key)
-            reason = cls._clean_text(item.get("reason"), "No reason supplied.")
+            reason = clean_model_text(item.get("reason"), "No reason supplied.")
             if len(reason) > cls.max_reason_characters:
                 reason = reason[: cls.max_reason_characters].rstrip() + "..."
             files.append(WorkspaceFixFile(canonical, reason))
@@ -87,28 +89,8 @@ class WorkspaceFixService:
 
     @staticmethod
     def _json_payload(response: str) -> dict:
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.splitlines()
-            if len(lines) >= 3 and lines[-1].strip() == "```":
-                cleaned = "\n".join(lines[1:-1]).strip()
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start < 0 or end <= start:
-            raise DesktopActionError("The reasoning model returned an invalid fix plan.")
-        try:
-            payload = json.loads(cleaned[start : end + 1])
-        except json.JSONDecodeError as exc:
-            raise DesktopActionError(f"The reasoning model returned invalid fix-plan JSON: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise DesktopActionError("The reasoning model returned an invalid fix plan.")
-        return payload
-
-    @staticmethod
-    def _clean_text(value: object, error: str) -> str:
-        if not isinstance(value, str):
-            raise DesktopActionError(error)
-        cleaned = re.sub(r"\s+", " ", value).strip()
-        if not cleaned:
-            raise DesktopActionError(error)
-        return cleaned
+        return extract_json_object(
+            response,
+            invalid_response_message="The reasoning model returned an invalid fix plan.",
+            invalid_json_prefix="The reasoning model returned invalid fix-plan JSON",
+        )

@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Iterable
 
-from PySide6.QtCore import QRect, QThreadPool, QTimer, Qt
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, QThreadPool, QTimer, Qt
 from PySide6.QtGui import QCloseEvent, QCursor, QGuiApplication, QImage
 from PySide6.QtWidgets import (
     QApplication,
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
@@ -36,7 +36,7 @@ COMPACT_MIN_HEIGHT = 180
 COMPACT_MAX_WIDTH = 560
 COMPACT_MAX_HEIGHT = 420
 COMPACT_SCREEN_MARGIN = 16
-COMPACT_COLLAPSED_HEIGHT = 116
+COMPACT_COLLAPSED_HEIGHT = 64
 MAX_SESSION_MESSAGES = 40
 
 
@@ -102,9 +102,10 @@ class CompactAssistantWindow(QWidget):
         self._pending_reply_text = ""
         self._busy = False
         self._closing = False
-        self._expanded = True
+        self._expanded = False
         self._anchor_screen = None
         self._expanded_geometry = QRect()
+        self._drag_offset: QPoint | None = None
 
         self.thread_pool = QThreadPool(self)
         self.task_runner = TaskRunner(self.thread_pool)
@@ -115,8 +116,11 @@ class CompactAssistantWindow(QWidget):
         self.setWindowFlags(
             Qt.WindowType.Window
             | Qt.WindowType.Tool
+            | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
+            | Qt.WindowType.NoDropShadowWindowHint
         )
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setStyleSheet(stylesheet_for_theme(config.theme))
         self._build_ui()
@@ -136,46 +140,31 @@ class CompactAssistantWindow(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(10, 10, 10, 10)
+        root.setContentsMargins(8, 8, 8, 8)
         root.setSpacing(8)
-
-        header = QHBoxLayout()
-        header.setSpacing(7)
-        self.paco_mark = paco_mark(30, parent=self, accessible_name="Paco compact assistant")
-        header.addWidget(self.paco_mark)
 
         self.status_indicator = QLabel("●")
         self.status_indicator.setObjectName("compactStatusIndicator")
         self.status_indicator.setAccessibleName("Assistant status")
-        header.addWidget(self.status_indicator)
+        self.status_indicator.hide()
 
         self.status_label = QLabel()
         self.status_label.setObjectName("compactStatusLabel")
-        self.status_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
-        header.addWidget(self.status_label, 1)
-
-        self.expand_button = QPushButton("▾")
-        self.expand_button.setObjectName("compactIconButton")
-        self.expand_button.setAccessibleName("Collapse conversation")
-        self.expand_button.setToolTip("Collapse conversation")
-        self.expand_button.setFixedSize(30, 28)
-        self.expand_button.clicked.connect(self.toggle_conversation)
-        header.addWidget(self.expand_button)
-
-        self.close_button = QPushButton("×")
-        self.close_button.setObjectName("compactIconButton")
-        self.close_button.setAccessibleName("Close compact assistant")
-        self.close_button.setToolTip("Close")
-        self.close_button.setFixedSize(30, 28)
-        self.close_button.clicked.connect(self.close)
-        header.addWidget(self.close_button)
-        root.addLayout(header)
+        self.status_label.setWordWrap(True)
+        self.status_label.hide()
+        root.addStretch(1)
 
         self.transcript_scroll = QScrollArea()
         self.transcript_scroll.setObjectName("compactTranscript")
         self.transcript_scroll.setWidgetResizable(True)
         self.transcript_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.transcript_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.transcript_scroll.viewport().setAttribute(
+            Qt.WidgetAttribute.WA_TranslucentBackground,
+            True,
+        )
+        self.transcript_scroll.viewport().setStyleSheet("background: transparent;")
         self.transcript_host = QWidget()
         self.transcript_host.setObjectName("compactTranscriptHost")
         self.transcript_layout = QVBoxLayout(self.transcript_host)
@@ -183,37 +172,78 @@ class CompactAssistantWindow(QWidget):
         self.transcript_layout.setSpacing(7)
         self.transcript_layout.addStretch(1)
         self.transcript_scroll.setWidget(self.transcript_host)
+        self.transcript_scroll.hide()
         root.addWidget(self.transcript_scroll, 1)
 
-        controls = QHBoxLayout()
+        root.addWidget(self.status_label)
+
+        self.input_bar = QFrame()
+        self.input_bar.setObjectName("compactInputBar")
+        controls = QHBoxLayout(self.input_bar)
+        controls.setContentsMargins(8, 6, 7, 6)
         controls.setSpacing(7)
-        self.capture_button = QPushButton("Capture")
+
+        self.paco_mark = paco_mark(
+            34,
+            parent=self.input_bar,
+            accessible_name="Paco compact assistant",
+        )
+        self.paco_mark.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.paco_mark.setToolTip("Drag Paco")
+        self.paco_mark.installEventFilter(self)
+        controls.addWidget(self.paco_mark)
+
+        self.capture_button = QPushButton()
         self.capture_button.setObjectName("compactCaptureButton")
         self.capture_button.setAccessibleName("Capture screen")
         self.capture_button.setToolTip("Capture the display under the cursor")
+        self.capture_button.setFixedSize(30, 30)
+        self.capture_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
+        )
+        self.capture_button.setIconSize(QSize(15, 15))
         self.capture_button.clicked.connect(self.capture_screen)
-        controls.addWidget(self.capture_button)
 
         self.prompt_input = QLineEdit()
         self.prompt_input.setObjectName("compactPromptInput")
         self.prompt_input.setAccessibleName("Question")
-        self.prompt_input.setPlaceholderText("Ask Paco…")
+        self.prompt_input.setPlaceholderText("Ask Paco...")
         self.prompt_input.setClearButtonEnabled(True)
         self.prompt_input.returnPressed.connect(self.submit_prompt)
         controls.addWidget(self.prompt_input, 1)
 
-        self.send_stop_button = QPushButton("Send")
-        self.send_stop_button.setObjectName("primaryButton")
+        controls.addWidget(self.capture_button)
+
+        self.send_stop_button = QPushButton()
+        self.send_stop_button.setObjectName("compactSendButton")
         self.send_stop_button.setAccessibleName("Send question")
+        self.send_stop_button.setToolTip("Send")
+        self.send_stop_button.setFixedSize(32, 32)
+        self.send_stop_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp)
+        )
+        self.send_stop_button.setIconSize(QSize(15, 15))
         self.send_stop_button.clicked.connect(self._send_or_stop)
         controls.addWidget(self.send_stop_button)
-        root.addLayout(controls)
+
+        self.close_button = QPushButton()
+        self.close_button.setObjectName("compactCloseButton")
+        self.close_button.setAccessibleName("Close compact assistant")
+        self.close_button.setToolTip("Close")
+        self.close_button.setFixedSize(24, 30)
+        self.close_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton)
+        )
+        self.close_button.setIconSize(QSize(12, 12))
+        self.close_button.clicked.connect(self.close)
+        controls.addWidget(self.close_button)
+        root.addWidget(self.input_bar)
 
         self.capture_note = QLabel()
         self.capture_note.setObjectName("compactCaptureNote")
         self.capture_note.setTextFormat(Qt.TextFormat.PlainText)
         self.capture_note.hide()
-        root.addWidget(self.capture_note)
+        root.insertWidget(root.indexOf(self.input_bar), self.capture_note)
 
     def place_on_screen(self, screen) -> QRect:
         if screen is None:
@@ -222,24 +252,55 @@ class CompactAssistantWindow(QWidget):
             self._anchor_screen = screen
             geometry = compact_geometry_for(screen.availableGeometry())
         self._expanded_geometry = QRect(geometry)
-        self.setGeometry(geometry)
-        return geometry
+        if self._expanded:
+            visible_geometry = geometry
+        else:
+            collapsed_height = min(COMPACT_COLLAPSED_HEIGHT, geometry.height())
+            visible_geometry = QRect(
+                geometry.x(),
+                geometry.y() + geometry.height() - collapsed_height,
+                geometry.width(),
+                collapsed_height,
+            )
+        self.setGeometry(visible_geometry)
+        return visible_geometry
 
     def toggle_conversation(self) -> None:
         self.set_conversation_expanded(not self._expanded)
+
+    def eventFilter(self, watched, event) -> bool:  # noqa: N802
+        if watched is self.paco_mark:
+            if (
+                event.type() == QEvent.Type.MouseButtonPress
+                and event.button() == Qt.MouseButton.LeftButton
+            ):
+                self._drag_offset = (
+                    event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+                )
+                self.paco_mark.setCursor(Qt.CursorShape.ClosedHandCursor)
+                return True
+            if (
+                event.type() == QEvent.Type.MouseMove
+                and self._drag_offset is not None
+                and event.buttons() & Qt.MouseButton.LeftButton
+            ):
+                self.move(event.globalPosition().toPoint() - self._drag_offset)
+                if self._expanded:
+                    self._expanded_geometry.moveTopLeft(self.frameGeometry().topLeft())
+                else:
+                    self._expanded_geometry.moveBottomRight(self.frameGeometry().bottomRight())
+                return True
+            if event.type() == QEvent.Type.MouseButtonRelease:
+                self._drag_offset = None
+                self.paco_mark.setCursor(Qt.CursorShape.OpenHandCursor)
+                return True
+        return super().eventFilter(watched, event)
 
     def set_conversation_expanded(self, expanded: bool) -> None:
         if self._expanded == expanded:
             return
         self._expanded = expanded
         self.transcript_scroll.setVisible(expanded)
-        self.expand_button.setText("▾" if expanded else "▴")
-        self.expand_button.setAccessibleName(
-            "Collapse conversation" if expanded else "Expand conversation"
-        )
-        self.expand_button.setToolTip(
-            "Collapse conversation" if expanded else "Expand conversation"
-        )
         if expanded:
             self.setGeometry(self._expanded_geometry)
             return
@@ -390,7 +451,7 @@ class CompactAssistantWindow(QWidget):
         self.capture_note.hide()
         self.prompt_input.clear()
 
-        self._append_message_view("user", prompt)
+        self._clear_transcript()
         self._pending_reply_label = self._append_message_view("assistant", "Thinking…")
         self._pending_reply_text = ""
         if not self._expanded:
@@ -516,7 +577,13 @@ class CompactAssistantWindow(QWidget):
         self.capture_button.setEnabled(not busy)
         self.prompt_input.setEnabled(not busy)
         self.send_stop_button.setEnabled(True)
-        self.send_stop_button.setText("Stop" if busy else "Send")
+        send_icon = (
+            QStyle.StandardPixmap.SP_MediaStop
+            if busy
+            else QStyle.StandardPixmap.SP_ArrowUp
+        )
+        self.send_stop_button.setIcon(self.style().standardIcon(send_icon))
+        self.send_stop_button.setToolTip("Stop" if busy else "Send")
         self.send_stop_button.setAccessibleName("Stop reply" if busy else "Send question")
 
     def _set_state(self, state: str, message: str) -> None:
@@ -524,6 +591,9 @@ class CompactAssistantWindow(QWidget):
         self.status_indicator.style().unpolish(self.status_indicator)
         self.status_indicator.style().polish(self.status_indicator)
         self.status_label.setText(message)
+        self.status_label.setVisible(state == "error")
+        if state == "error" and not self._expanded:
+            self.set_conversation_expanded(True)
 
     def _append_message_view(self, role: str, content: str) -> QLabel:
         frame = QFrame(self.transcript_host)

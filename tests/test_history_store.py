@@ -336,6 +336,39 @@ class HistoryStoreTests(unittest.TestCase):
             )
             self.assertEqual("saved before failure", recovered.messages[0].content)
 
+    def test_invalid_conversation_ids_cannot_escape_the_history_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            store = HistoryStore(root / "chats", root / "legacy.json")
+
+            for operation in (
+                lambda: store.load_conversation("../outside"),
+                lambda: store.save_conversation("../outside", []),
+                lambda: store.rename_conversation("../outside", "Unsafe"),
+                lambda: store.delete_conversation("../outside"),
+            ):
+                with self.subTest(operation=operation), self.assertRaisesRegex(
+                    ValueError,
+                    "Conversation ID is invalid",
+                ):
+                    operation()
+
+            self.assertFalse((root / "outside.json").exists())
+
+    def test_non_conversation_json_files_are_ignored(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            history_dir = root / "chats"
+            history_dir.mkdir()
+            (history_dir / "notes.json").write_text(
+                '{"title": "Not a conversation", "messages": []}',
+                encoding="utf-8",
+            )
+
+            store = HistoryStore(history_dir, root / "legacy.json")
+
+            self.assertEqual([], store.list_conversations())
+
 
 if __name__ == "__main__":
     unittest.main()

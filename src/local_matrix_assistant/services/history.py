@@ -16,6 +16,7 @@ from local_matrix_assistant.services.attachments import AttachmentService
 
 _INDEX_FILENAME = "_history_index.json"
 _INDEX_VERSION = 1
+_CONVERSATION_ID_PATTERN = re.compile(r"[0-9a-f]{32}", re.IGNORECASE)
 
 
 @dataclass(slots=True)
@@ -62,6 +63,7 @@ class HistoryStore:
         ]
 
     def rename_conversation(self, conversation_id: str, title: str) -> ConversationSummary:
+        conversation_id = self._validated_conversation_id(conversation_id)
         cleaned = re.sub(r"\s+", " ", title).strip()
         if not cleaned:
             raise ValueError("Conversation title cannot be empty.")
@@ -124,6 +126,7 @@ class HistoryStore:
         return ConversationRecord(summary=summary, messages=[], memory=memory)
 
     def load_conversation(self, conversation_id: str) -> ConversationRecord:
+        conversation_id = self._validated_conversation_id(conversation_id)
         path = self._conversation_path(conversation_id)
         payload = self._load_payload(path)
         if not payload:
@@ -156,6 +159,7 @@ class HistoryStore:
         created_at: str | None = None,
         memory: ConversationMemory | None = None,
     ) -> ConversationSummary:
+        conversation_id = self._validated_conversation_id(conversation_id)
         existing = self._load_payload(self._conversation_path(conversation_id)) or {}
         summary = ConversationSummary(
             conversation_id=conversation_id,
@@ -172,6 +176,7 @@ class HistoryStore:
         return summary
 
     def delete_conversation(self, conversation_id: str) -> None:
+        conversation_id = self._validated_conversation_id(conversation_id)
         self._conversation_path(conversation_id).unlink(missing_ok=True)
         with self._index_lock:
             removed = self._index.pop(conversation_id, None)
@@ -303,8 +308,9 @@ class HistoryStore:
         for raw in raw_entries:
             if not isinstance(raw, dict):
                 continue
-            conversation_id = str(raw.get("conversation_id", "")).strip()
-            if not conversation_id or Path(conversation_id).name != conversation_id:
+            try:
+                conversation_id = self._validated_conversation_id(raw.get("conversation_id"))
+            except ValueError:
                 continue
             try:
                 summary = ConversationSummary(
@@ -334,7 +340,7 @@ class HistoryStore:
                 and directory_modified_ns == self._directory_modified_ns
             ):
                 return
-        files = {path.stem: path for path in self._conversation_files()}
+        files = {path.stem.casefold(): path for path in self._conversation_files()}
         changed = False
         with self._index_lock:
             for conversation_id in list(self._index):
@@ -480,7 +486,7 @@ class HistoryStore:
         return [
             path
             for path in sorted(self._history_dir.glob("*.json"))
-            if path.name != _INDEX_FILENAME
+            if _CONVERSATION_ID_PATTERN.fullmatch(path.stem)
         ]
 
     @classmethod
@@ -536,6 +542,14 @@ class HistoryStore:
 
     def _conversation_path(self, conversation_id: str) -> Path:
         return self._history_dir / f"{conversation_id}.json"
+
+    @staticmethod
+    def _validated_conversation_id(conversation_id: object) -> str:
+        if not isinstance(conversation_id, str) or not _CONVERSATION_ID_PATTERN.fullmatch(
+            conversation_id
+        ):
+            raise ValueError("Conversation ID is invalid.")
+        return conversation_id.casefold()
 
     @staticmethod
     def now_stamp() -> str:

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import re
 
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
 
 
 _BLOCKED_DESTRUCTIVE = re.compile(
@@ -46,8 +46,11 @@ class AgentIntentService:
     @classmethod
     def parse_response(cls, response: str) -> AgentIntent:
         payload = cls._json_payload(response)
-        kind = cls._clean_text(payload.get("kind"), "The model did not identify the request type.").casefold()
-        request = cls._clean_text(payload.get("request"), "The model did not interpret the request.")
+        kind = clean_model_text(
+            payload.get("kind"),
+            "The model did not identify the request type.",
+        ).casefold()
+        request = clean_model_text(payload.get("request"), "The model did not interpret the request.")
         if kind not in _INTENT_KINDS:
             raise DesktopActionError(f"The model returned an unsupported request type: {kind}")
         if len(request) > cls.max_request_characters:
@@ -56,28 +59,8 @@ class AgentIntentService:
 
     @staticmethod
     def _json_payload(response: str) -> dict:
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.splitlines()
-            if len(lines) >= 3 and lines[-1].strip() == "```":
-                cleaned = "\n".join(lines[1:-1]).strip()
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start < 0 or end <= start:
-            raise DesktopActionError("The model returned an invalid Agent routing response.")
-        try:
-            payload = json.loads(cleaned[start : end + 1])
-        except json.JSONDecodeError as exc:
-            raise DesktopActionError(f"The model returned invalid Agent routing JSON: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise DesktopActionError("The model returned an invalid Agent routing response.")
-        return payload
-
-    @staticmethod
-    def _clean_text(value: object, error: str) -> str:
-        if not isinstance(value, str):
-            raise DesktopActionError(error)
-        cleaned = re.sub(r"\s+", " ", value).strip()
-        if not cleaned:
-            raise DesktopActionError(error)
-        return cleaned
+        return extract_json_object(
+            response,
+            invalid_response_message="The model returned an invalid Agent routing response.",
+            invalid_json_prefix="The model returned invalid Agent routing JSON",
+        )

@@ -32,6 +32,14 @@ class AgentIntentServiceTests(unittest.TestCase):
         with self.assertRaises(DesktopActionError):
             AgentIntentService.parse_response('{"kind":"shell","request":"run arbitrary command"}')
 
+    def test_uses_valid_embedded_object_after_malformed_braced_prose(self) -> None:
+        intent = AgentIntentService.parse_response(
+            'Draft {kind: unknown}; final: {"kind":"answer","request":"Explain the result."}'
+        )
+
+        self.assertEqual("answer", intent.kind)
+        self.assertEqual("Explain the result.", intent.request)
+
 
 if __name__ == "__main__":
     unittest.main()

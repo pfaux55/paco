@@ -15,7 +15,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtCore import QRect
+from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QImage, QPixmap
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -109,6 +109,16 @@ class CompactAssistantTests(unittest.TestCase):
             ollama_client=client or RecordingOllama(),
             start_status_check=False,
         )
+
+    def test_overlay_is_transparent_frameless_and_starts_as_an_input_bar(self) -> None:
+        window = self.build_window()
+
+        self.assertTrue(window.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground))
+        self.assertTrue(window.windowFlags() & Qt.WindowType.FramelessWindowHint)
+        self.assertEqual("compactInputBar", window.input_bar.objectName())
+        self.assertTrue(window.transcript_scroll.isHidden())
+        self.assertLessEqual(window.height(), 64)
+        window.close()
 
     def test_target_geometry_is_bottom_right_and_bounded_across_work_areas(self) -> None:
         cases = (

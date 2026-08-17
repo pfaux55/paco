@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 import re
 from typing import Callable
 
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
 from local_matrix_assistant.services.workspace_actions import WorkspaceActionService
 
 
@@ -86,7 +86,10 @@ class WorkspaceTaskService:
     @classmethod
     def parse_plan(cls, response: str, allowed_files: tuple[str, ...]) -> WorkspaceTaskPlan:
         payload = cls._json_payload(response)
-        summary = cls._clean_text(payload.get("summary"), "The reasoning model did not provide a task summary.")
+        summary = clean_model_text(
+            payload.get("summary"),
+            "The reasoning model did not provide a task summary.",
+        )
         if len(summary) > cls.max_summary_characters:
             summary = summary[: cls.max_summary_characters].rstrip() + "..."
         raw_steps = payload.get("steps")
@@ -102,12 +105,18 @@ class WorkspaceTaskService:
         for raw_step in raw_steps:
             if not isinstance(raw_step, dict):
                 raise DesktopActionError("The reasoning model returned an invalid investigation step.")
-            tool = cls._clean_text(raw_step.get("tool"), "An investigation tool is missing.").casefold()
-            reason = cls._clean_text(raw_step.get("reason"), "An investigation step reason is missing.")
+            tool = clean_model_text(
+                raw_step.get("tool"),
+                "An investigation tool is missing.",
+            ).casefold()
+            reason = clean_model_text(
+                raw_step.get("reason"),
+                "An investigation step reason is missing.",
+            )
             if len(reason) > cls.max_reason_characters:
                 reason = reason[: cls.max_reason_characters].rstrip() + "..."
             if tool == "read_file":
-                requested = cls._clean_text(raw_step.get("path"), "A read step path is missing.")
+                requested = clean_model_text(raw_step.get("path"), "A read step path is missing.")
                 canonical = allowed.get(requested.replace("\\", "/").casefold())
                 if canonical is None:
                     raise DesktopActionError(
@@ -116,7 +125,7 @@ class WorkspaceTaskService:
                 key = (tool, canonical.casefold())
                 step = WorkspaceTaskStep(tool=tool, path=canonical, reason=reason)
             elif tool == "search_files":
-                query = cls._clean_text(raw_step.get("query"), "A search step query is missing.")
+                query = clean_model_text(raw_step.get("query"), "A search step query is missing.")
                 if len(query) < 2:
                     raise DesktopActionError("A planned search query must contain at least two characters.")
                 if len(query) > cls.max_search_characters:
@@ -184,28 +193,8 @@ class WorkspaceTaskService:
 
     @staticmethod
     def _json_payload(response: str) -> dict:
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.splitlines()
-            if len(lines) >= 3 and lines[-1].strip() == "```":
-                cleaned = "\n".join(lines[1:-1]).strip()
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start < 0 or end <= start:
-            raise DesktopActionError("The reasoning model returned an invalid investigation plan.")
-        try:
-            payload = json.loads(cleaned[start : end + 1])
-        except json.JSONDecodeError as exc:
-            raise DesktopActionError(f"The reasoning model returned invalid task-plan JSON: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise DesktopActionError("The reasoning model returned an invalid investigation plan.")
-        return payload
-
-    @staticmethod
-    def _clean_text(value: object, error: str) -> str:
-        if not isinstance(value, str):
-            raise DesktopActionError(error)
-        cleaned = re.sub(r"\s+", " ", value).strip()
-        if not cleaned:
-            raise DesktopActionError(error)
-        return cleaned
+        return extract_json_object(
+            response,
+            invalid_response_message="The reasoning model returned an invalid investigation plan.",
+            invalid_json_prefix="The reasoning model returned invalid task-plan JSON",
+        )

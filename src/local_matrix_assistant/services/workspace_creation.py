@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
 import re
 
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
 
 
 _POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
@@ -75,8 +75,8 @@ class WorkspaceCreationService:
     @classmethod
     def parse_plan(cls, response: str) -> WorkspaceCreationPlan:
         payload = cls._json_payload(response)
-        path = cls._clean_text(payload.get("path"), "The coding model did not choose a file path.")
-        instructions = cls._clean_text(
+        path = clean_model_text(payload.get("path"), "The coding model did not choose a file path.")
+        instructions = clean_model_text(
             payload.get("instructions"),
             "The coding model did not describe the file to create.",
         )
@@ -96,28 +96,8 @@ class WorkspaceCreationService:
 
     @staticmethod
     def _json_payload(response: str) -> dict:
-        cleaned = response.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.splitlines()
-            if len(lines) >= 3 and lines[-1].strip() == "```":
-                cleaned = "\n".join(lines[1:-1]).strip()
-        start = cleaned.find("{")
-        end = cleaned.rfind("}")
-        if start < 0 or end <= start:
-            raise DesktopActionError("The coding model returned an invalid new-file plan.")
-        try:
-            payload = json.loads(cleaned[start : end + 1])
-        except json.JSONDecodeError as exc:
-            raise DesktopActionError(f"The coding model returned invalid new-file JSON: {exc}") from exc
-        if not isinstance(payload, dict):
-            raise DesktopActionError("The coding model returned an invalid new-file plan.")
-        return payload
-
-    @staticmethod
-    def _clean_text(value: object, error: str) -> str:
-        if not isinstance(value, str):
-            raise DesktopActionError(error)
-        cleaned = re.sub(r"\s+", " ", value).strip()
-        if not cleaned:
-            raise DesktopActionError(error)
-        return cleaned
+        return extract_json_object(
+            response,
+            invalid_response_message="The coding model returned an invalid new-file plan.",
+            invalid_json_prefix="The coding model returned invalid new-file JSON",
+        )
