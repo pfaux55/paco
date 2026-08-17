@@ -1,4 +1,4 @@
-# Paco — Local Matrix Assistant
+# Paco (Peters Agent Computer Operator)
 
 Paco is a local-first Windows desktop AI assistant with a custom PySide6 interface. It combines private Ollama inference, conversational workspace automation, reviewed code generation and editing, bounded command execution, offline speech recognition, offline speech synthesis, optional source-backed web search, and persistent local history in a black-and-green Matrix-style UI.
 
