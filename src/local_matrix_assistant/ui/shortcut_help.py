@@ -30,7 +30,7 @@ SHORTCUTS = (
 class ShortcutHelpDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Jarvis Keyboard Shortcuts")
+        self.setWindowTitle("Paco Keyboard Shortcuts")
         self.setModal(False)
         self.setMinimumWidth(430)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)

@@ -100,7 +100,7 @@ class WorkspaceActionServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             parent = Path(tmp)
             root = parent / "project"
-            backup_root = parent / "jarvis"
+            backup_root = parent / "paco"
             root.mkdir()
             path = root / "app.py"
             path.write_text("status = 'old'\n", encoding="utf-8")

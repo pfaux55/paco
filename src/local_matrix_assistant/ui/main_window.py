@@ -24,7 +24,7 @@ from local_matrix_assistant.services.workspace_actions import WorkspaceActionSer
 from local_matrix_assistant.services.workspace_analysis import WorkspaceAnalysisService
 from local_matrix_assistant.services.word_documents import WordDocumentService
 from local_matrix_assistant.ui.agent_panel import AgentPanel
-from local_matrix_assistant.ui.brand import jarvis_icon, jarvis_mark
+from local_matrix_assistant.ui.brand import paco_icon, paco_mark
 from local_matrix_assistant.ui.chat_panel import ChatPanel
 from local_matrix_assistant.ui.main_window_agent import AgentWindowMixin
 from local_matrix_assistant.ui.main_window_chat import ChatWindowMixin
@@ -46,7 +46,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
     def __init__(self, paths: AppPaths, config: AppConfig) -> None:
         super().__init__()
-        self.setWindowIcon(jarvis_icon())
+        self.setWindowIcon(paco_icon())
         self.paths = paths
         self.config = config
         self.setStyleSheet(stylesheet_for_theme(config.theme))
@@ -65,7 +65,6 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.tts_service = TtsService(config.tts_model_path, config.tts_config_path)
         self.recorder = AudioRecorder(config.preferred_input_name)
         self.player = AudioPlayer(config.playback_output_name)
-        self.startup_player = AudioPlayer(config.playback_output_name)
         self.web_search_service = WebSearchService()
         self.model_router = ModelRouter()
         self.conversation_memory_service = ConversationMemoryService()
@@ -274,8 +273,6 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.startup_sequence = StartupSequence(
             app_name=APP_NAME,
             root=root,
-            content_root=self.content_root,
-            startup_player=self.startup_player,
         )
 
     def _build_header(self) -> QWidget:
@@ -291,7 +288,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.sidebar_toggle_button.setAccessibleName("Toggle navigation and chat history")
         header_layout.addWidget(self.sidebar_toggle_button)
 
-        logo = jarvis_mark(34, accessible_name="Jarvis application")
+        logo = paco_mark(34, accessible_name="Paco application")
         logo.setObjectName("appLogo")
         header_layout.addWidget(logo)
 
@@ -404,7 +401,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         idle_layout = QHBoxLayout(self.sidebar_activity_card)
         idle_layout.setContentsMargins(14, 12, 14, 12)
         idle_layout.setSpacing(10)
-        idle_dot = jarvis_mark(34, accessible_name="Jarvis status")
+        idle_dot = paco_mark(34, accessible_name="Paco status")
         idle_dot.setObjectName("idleAvatar")
         idle_layout.addWidget(idle_dot)
         idle_text_col = QVBoxLayout()

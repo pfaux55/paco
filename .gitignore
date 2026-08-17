@@ -23,7 +23,7 @@ models/
 *.wav
 *.tmp
 *.bak
-.jarvis-backups/
+.paco-backups/
 
 # Secrets and machine-local configuration
 .env

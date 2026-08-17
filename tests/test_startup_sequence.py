@@ -19,20 +19,6 @@ from PySide6.QtWidgets import QApplication, QWidget
 from local_matrix_assistant.ui.startup_sequence import StartupSequence
 
 
-class FakeAudioPlayer:
-    def __init__(self) -> None:
-        self.stop_calls = 0
-
-    def stop(self) -> None:
-        self.stop_calls += 1
-
-    def play_wav(self, data: bytes) -> None:
-        del data
-
-    def set_output_device_name(self, output_name: str) -> None:
-        del output_name
-
-
 class StartupSequenceTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -42,14 +28,10 @@ class StartupSequenceTests(unittest.TestCase):
         root = QWidget()
         root.resize(800, 600)
         content = QWidget(root)
-        player = FakeAudioPlayer()
-
         with patch.object(StartupSequence, "startup_timeout_ms", 20):
             sequence = StartupSequence(
-                app_name="Jarvis",
+                app_name="Paco",
                 root=root,
-                content_root=content,
-                startup_player=player,
             )
             sequence.begin()
             QTest.qWait(120)
@@ -58,8 +40,25 @@ class StartupSequenceTests(unittest.TestCase):
         self.assertTrue(sequence.overlay._finished)
         self.assertFalse(sequence.overlay.isEnabled())
         self.assertFalse(sequence._startup_timeout.isActive())
-        self.assertEqual(1.0, sequence.content_opacity.opacity())
-        self.assertGreaterEqual(player.stop_calls, 1)
+        self.assertIsNone(content.graphicsEffect())
+        root.close()
+
+    def test_begin_starts_and_advances_the_startup_animation(self) -> None:
+        root = QWidget()
+        root.resize(800, 600)
+        sequence = StartupSequence(
+            app_name="Paco",
+            root=root,
+        )
+        root.show()
+
+        sequence.begin()
+
+        self.assertTrue(sequence.overlay._started)
+        self.assertTrue(sequence.overlay.isVisible())
+        self.assertTrue(sequence.overlay._animation_group.state())
+        QTest.qWait(200)
+        self.assertGreater(sequence.overlay._intro_progress, 0.0)
         root.close()
 
 

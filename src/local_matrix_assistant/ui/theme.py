@@ -51,6 +51,64 @@ QFrame#topBar {
     border: none;
     border-radius: 0;
 }
+QWidget#compactAssistant {
+    background: #050c09;
+}
+QScrollArea#compactTranscript,
+QWidget#compactTranscriptHost {
+    background: #030806;
+    border: none;
+}
+QFrame#compactMessageUser,
+QFrame#compactMessageAssistant {
+    background: #09130e;
+    border: 1px solid #173325;
+    border-radius: 11px;
+}
+QFrame#compactMessageUser {
+    border-color: #24583c;
+}
+QLabel#compactMessageRole {
+    color: #6f927b;
+    font-size: 9px;
+    font-weight: 800;
+}
+QLabel#compactMessageBody {
+    color: #e4eee7;
+}
+QLabel#compactStatusIndicator {
+    color: #718f7c;
+    font-size: 14px;
+}
+QLabel#compactStatusIndicator[assistantState="ready"] {
+    color: #24e081;
+}
+QLabel#compactStatusIndicator[assistantState="loading"],
+QLabel#compactStatusIndicator[assistantState="streaming"] {
+    color: #e0a224;
+}
+QLabel#compactStatusIndicator[assistantState="error"] {
+    color: #e04444;
+}
+QLabel#compactStatusLabel,
+QLabel#compactCaptureNote {
+    color: #9eb8a7;
+    font-size: 10px;
+}
+QPushButton#compactIconButton {
+    background: transparent;
+    border: 1px solid #1d412e;
+    border-radius: 8px;
+    padding: 0;
+}
+QPushButton#compactCaptureButton {
+    padding-left: 10px;
+    padding-right: 10px;
+}
+QLineEdit#compactPromptInput {
+    min-height: 34px;
+    padding: 0 10px;
+}
 QFrame#systemNoticeWarning,
 QFrame#systemNoticeError,
 QFrame#systemNoticeInfo {

@@ -52,7 +52,7 @@ class WidgetTests(unittest.TestCase):
         )
         self.assertEqual(Qt.TextFormat.PlainText, bubble.body_label.textFormat())
 
-    def test_jarvis_mark_only_appears_on_assistant_messages(self) -> None:
+    def test_paco_mark_only_appears_on_assistant_messages(self) -> None:
         assistant = MessageBubble(ChatMessage("assistant", "Ready", "now"))
         user = MessageBubble(ChatMessage("user", "Hello", "now"))
 

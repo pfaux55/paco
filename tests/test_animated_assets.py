@@ -68,9 +68,10 @@ class AnimatedAssetTests(unittest.TestCase):
                         self.assertNotIn("url(", value.lower())
 
     def test_startup_overlay_uses_the_bundled_animation(self) -> None:
-        overlay = StartupOverlay("JARVIS")
+        overlay = StartupOverlay("Paco")
         self.assertTrue(overlay._pulse_indicator.is_valid)
         self.assertTrue(overlay._pulse_indicator.is_animated)
+        self.assertEqual(30, overlay._pulse_indicator._frames_per_second)
         overlay.close()
         overlay.deleteLater()
 

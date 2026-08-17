@@ -128,7 +128,7 @@ class OllamaClient:
                     response.close()
                     return
 
-        watcher = threading.Thread(target=close_on_cancel, name="jarvis-ollama-cancel", daemon=True)
+        watcher = threading.Thread(target=close_on_cancel, name="paco-ollama-cancel", daemon=True)
         watcher.start()
         try:
             with response:
@@ -220,7 +220,7 @@ class OllamaClient:
 
         watcher = threading.Thread(
             target=close_on_cancel,
-            name="jarvis-ollama-pull-cancel",
+            name="paco-ollama-pull-cancel",
             daemon=True,
         )
         watcher.start()
@@ -292,7 +292,7 @@ class OllamaClient:
             except BaseException as exc:  # noqa: BLE001
                 pending.put(exc)
 
-        opener = threading.Thread(target=open_stream, name="jarvis-ollama-connect", daemon=True)
+        opener = threading.Thread(target=open_stream, name="paco-ollama-connect", daemon=True)
         opener.start()
         while True:
             if should_cancel():

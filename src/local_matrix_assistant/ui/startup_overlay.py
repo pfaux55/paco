@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from io import BytesIO
 import math
 from pathlib import Path
-import struct
-import wave
 
 from PySide6.QtCore import (
-    QAbstractAnimation,
     QEasingCurve,
     Property,
     QParallelAnimationGroup,
@@ -18,52 +14,10 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
 
 from local_matrix_assistant.ui.animated import AnimatedSvgWidget
-
-
-def build_startup_chime() -> bytes:
-    sample_rate = 16000
-    duration_seconds = 1.55
-    frame_count = int(sample_rate * duration_seconds)
-    peak = 0.23
-    samples = []
-
-    for index in range(frame_count):
-        t = index / sample_rate
-        attack = min(1.0, t / 0.16)
-        release = min(1.0, max(0.0, (duration_seconds - t) / 0.52))
-        envelope = attack * release
-
-        bloom = min(1.0, max(0.0, (t - 0.18) / 0.24))
-        shimmer = min(1.0, max(0.0, (t - 0.32) / 0.2))
-
-        root = math.sin(2.0 * math.pi * 196.0 * t)
-        fifth = math.sin(2.0 * math.pi * 293.66 * t)
-        upper = math.sin(2.0 * math.pi * 392.0 * t)
-        air = math.sin(2.0 * math.pi * 587.33 * t)
-        warmth = math.sin(2.0 * math.pi * 98.0 * t)
-        sway = math.sin(2.0 * math.pi * 1.65 * t) * 0.5 + 0.5
-
-        value = peak * envelope * (
-            (0.46 * root)
-            + (0.25 * fifth * (0.72 + (0.28 * bloom)))
-            + (0.14 * upper * bloom)
-            + (0.06 * air * shimmer)
-            + (0.09 * warmth)
-        ) * (0.92 + (0.08 * sway))
-        samples.append(max(-1.0, min(1.0, value)))
-
-    pcm = b"".join(struct.pack("<h", int(sample * 32767)) for sample in samples)
-    buffer = BytesIO()
-    with wave.open(buffer, "wb") as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(sample_rate)
-        wav_file.writeframes(pcm)
-    return buffer.getvalue()
 
 
 class StartupOverlay(QWidget):
@@ -76,7 +30,7 @@ class StartupOverlay(QWidget):
         self._overlay_opacity = 0.0
         self._started = False
         self._finished = False
-        self._sound_callback = None
+        self._background_cache = QPixmap()
 
         self.setObjectName("startupOverlay")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
@@ -99,7 +53,8 @@ class StartupOverlay(QWidget):
         self._pulse_indicator = AnimatedSvgWidget(
             pulse_path,
             size=160,
-            accessible_name="Jarvis startup in progress",
+            frames_per_second=30,
+            accessible_name="Paco startup in progress",
             parent=self,
         )
         self._pulse_opacity = QGraphicsOpacityEffect(self._pulse_indicator)
@@ -149,11 +104,10 @@ class StartupOverlay(QWidget):
 
     overlay_opacity = Property(float, get_overlay_opacity, set_overlay_opacity)
 
-    def start(self, sound_callback=None) -> None:
+    def start(self) -> None:
         if self._started:
             return
         self._started = True
-        self._sound_callback = sound_callback
         self.set_intro_progress(0.0)
         self.set_reveal_progress(0.0)
         self.set_overlay_opacity(0.0)
@@ -172,6 +126,7 @@ class StartupOverlay(QWidget):
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
+        self._rebuild_background_cache()
         self._update_label_geometry()
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
@@ -192,11 +147,9 @@ class StartupOverlay(QWidget):
         painter.setOpacity(self._overlay_opacity)
 
         rect = self.rect()
-        gradient = QLinearGradient(rect.topLeft(), rect.bottomRight())
-        gradient.setColorAt(0.0, QColor(2, 9, 7, 248))
-        gradient.setColorAt(0.5, QColor(3, 13, 10, 235))
-        gradient.setColorAt(1.0, QColor(0, 3, 2, 250))
-        painter.fillRect(rect, gradient)
+        if self._background_cache.size() != rect.size():
+            self._rebuild_background_cache()
+        painter.drawPixmap(0, 0, self._background_cache)
 
         painter.setOpacity(0.16 * (1.0 - self._reveal_progress))
         scanline_pen = QPen(QColor(90, 255, 160, 28))
@@ -322,7 +275,6 @@ class StartupOverlay(QWidget):
         self._animation_group.addPause(120)
         self._animation_group.addAnimation(outro_group)
         self._animation_group.finished.connect(self._complete)
-        self._animation_group.stateChanged.connect(self._on_animation_state_changed)
         return self._animation_group
 
     def _complete(self) -> None:
@@ -331,12 +283,6 @@ class StartupOverlay(QWidget):
         self._finished = True
         self.hide()
         self.finished.emit()
-
-    def _on_animation_state_changed(self, new_state, old_state) -> None:
-        del old_state
-        if new_state == QAbstractAnimation.State.Running and self._sound_callback:
-            self._sound_callback()
-            self._sound_callback = None
 
     def _update_label_geometry(self) -> None:
         rect = self.rect()
@@ -352,6 +298,18 @@ class StartupOverlay(QWidget):
             rect.center().x() - (pulse_size // 2),
             pulse_center_y - (pulse_size // 2),
         )
+
+    def _rebuild_background_cache(self) -> None:
+        if self.width() <= 0 or self.height() <= 0:
+            return
+        self._background_cache = QPixmap(self.size())
+        painter = QPainter(self._background_cache)
+        gradient = QLinearGradient(self.rect().topLeft(), self.rect().bottomRight())
+        gradient.setColorAt(0.0, QColor(2, 9, 7))
+        gradient.setColorAt(0.5, QColor(3, 13, 10))
+        gradient.setColorAt(1.0, QColor(0, 3, 2))
+        painter.fillRect(self.rect(), gradient)
+        painter.end()
 
     def _sync_pulse_opacity(self) -> None:
         self._pulse_opacity.setOpacity(self._overlay_opacity * (1.0 - self._reveal_progress))

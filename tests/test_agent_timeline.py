@@ -56,17 +56,17 @@ class AgentTimelineTests(unittest.TestCase):
         card = timeline.append_entry(
             "Command",
             "run tests in tests/test_agent.py",
-            workspace_path=r"D:\projects\jarvis",
+            workspace_path=r"D:\projects\paco",
         )
 
         card.reuse_command_button.click()
 
         self.assertEqual(
-            [("run tests in tests/test_agent.py", r"D:\projects\jarvis")],
+            [("run tests in tests/test_agent.py", r"D:\projects\paco")],
             recalled,
         )
-        self.assertEqual("Workspace: jarvis", card.scope_label.text())
-        self.assertEqual(r"D:\projects\jarvis", card.scope_label.toolTip())
+        self.assertEqual("Workspace: paco", card.scope_label.text())
+        self.assertEqual(r"D:\projects\paco", card.scope_label.toolTip())
         timeline.close()
 
     def test_command_card_opens_its_linked_task_details(self) -> None:
@@ -77,7 +77,7 @@ class AgentTimelineTests(unittest.TestCase):
         card = timeline.append_entry(
             "Command",
             "run tests",
-            workspace_path=r"D:\projects\jarvis",
+            workspace_path=r"D:\projects\paco",
             task_id="task_123",
         )
 

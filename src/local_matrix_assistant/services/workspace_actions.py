@@ -181,7 +181,7 @@ class WorkspaceActionService:
         ".git",
         ".hg",
         ".svn",
-        ".jarvis-backups",
+        ".paco-backups",
         ".mypy_cache",
         ".pytest_cache",
         ".ruff_cache",
@@ -752,7 +752,7 @@ class WorkspaceActionService:
 
     def _write_backup(self, path: Path, data: bytes) -> Path:
         digest = hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:12]
-        backup_root = self.desktop_actions.default_files_dir.resolve() / ".jarvis-backups" / digest
+        backup_root = self.desktop_actions.default_files_dir.resolve() / ".paco-backups" / digest
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
         backup = backup_root / f"{path.name}.{timestamp}.bak"
         try:
@@ -765,7 +765,7 @@ class WorkspaceActionService:
 
     @staticmethod
     def _atomic_replace(path: Path, data: bytes) -> None:
-        temporary = path.with_name(f".{path.name}.jarvis-{uuid.uuid4().hex}.tmp")
+        temporary = path.with_name(f".{path.name}.paco-{uuid.uuid4().hex}.tmp")
         try:
             temporary.write_bytes(data)
             os.chmod(temporary, stat.S_IMODE(path.stat().st_mode))

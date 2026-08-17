@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 
 from local_matrix_assistant.core.constants import APP_NAME
 from local_matrix_assistant.core.models import ChatMessage
-from local_matrix_assistant.ui.brand import jarvis_mark
+from local_matrix_assistant.ui.brand import paco_mark
 from local_matrix_assistant.services.attachments import AttachmentService
 from local_matrix_assistant.ui.code_highlighter import CodeSyntaxHighlighter
 
@@ -286,7 +286,7 @@ class MessageBubble(QFrame):
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
 
-        self.role_icon = jarvis_mark(16, accessible_name="Jarvis message")
+        self.role_icon = paco_mark(16, accessible_name="Paco message")
         header_layout.addWidget(self.role_icon)
 
         self.role_label = QLabel("")

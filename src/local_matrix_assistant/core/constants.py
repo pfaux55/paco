@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 
-APP_NAME = "Jarvis"
-APP_TITLE = "JARVIS"
+APP_NAME = "Paco"
+APP_TITLE = "Paco"
 SEND_GLYPH = "\u2191"
 
 DEFAULT_ACTIVITY = "Idle"

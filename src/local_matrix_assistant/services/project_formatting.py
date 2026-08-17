@@ -50,7 +50,7 @@ class ProjectFormattingService:
             raise DesktopActionError("The active Agent folder changed before formatting started.")
 
         on_event(ProjectFormatEvent("phase", "Copying eligible project files into isolated staging..."))
-        with tempfile.TemporaryDirectory(prefix="jarvis-format-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="paco-format-") as temporary:
             stage = Path(temporary).resolve() / "workspace"
             stage.mkdir(parents=True)
             copied = self._copy_workspace(root, stage, should_cancel)

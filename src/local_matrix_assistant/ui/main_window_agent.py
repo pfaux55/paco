@@ -933,7 +933,7 @@ class AgentWindowMixin:
                 ChatMessage(
                     role="system",
                     content=(
-                        "You are Jarvis, a conversational local coding agent. Answer naturally and directly. "
+                        "You are Paco, a conversational local coding agent. Answer naturally and directly. "
                         "Use recent Agent context for follow-ups. Never claim files changed or actions ran unless "
                         "the context explicitly confirms them."
                     ),

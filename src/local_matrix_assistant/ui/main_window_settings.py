@@ -85,7 +85,6 @@ class SettingsStatusWindowMixin:
         self.tts_service.update_paths(self.config.tts_model_path, self.config.tts_config_path)
         self.recorder.set_input_device_name(self.config.preferred_input_name)
         self.player.set_output_device_name(self.config.playback_output_name)
-        self.startup_sequence.set_output_device_name(self.config.playback_output_name)
         self.desktop_action_service.update_working_folders(
             self.config.working_folders,
             self.config.active_working_folder,

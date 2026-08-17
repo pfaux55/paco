@@ -155,7 +155,7 @@ class ModelRouter:
     @staticmethod
     def system_prompt(profile: str) -> str:
         base = (
-            "You are Jarvis, a private local desktop assistant. Be accurate, direct, and useful. "
+            "You are Paco, a private local desktop assistant. Be accurate, direct, and useful. "
             "State uncertainty plainly and never claim an action succeeded unless the provided context confirms it."
         )
         guidance = {

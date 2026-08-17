@@ -114,7 +114,7 @@ class AttachmentService:
             raise AttachmentError("Attachment text limit reached; remove a file before adding another.")
         truncated = extraction_truncated or len(content) > limit
         if truncated:
-            content = content[:limit].rstrip() + "\n\n[Snapshot truncated by Jarvis]"
+            content = content[:limit].rstrip() + "\n\n[Snapshot truncated by Paco]"
         return LocalAttachment(
             path=str(path),
             name=path.name,
@@ -252,7 +252,7 @@ class AttachmentService:
         for index, attachment in enumerate(cls.metadata_attachments(metadata)):
             snapshots.append(
                 LocalAttachment(
-                    path=f".jarvis-history/{key_prefix}-{index}",
+                    path=f".paco-history/{key_prefix}-{index}",
                     name=str(attachment.get("name", f"file-{index + 1}")),
                     size_bytes=int(attachment.get("size_bytes", 0)),
                     content=str(attachment.get("content", "")),

@@ -35,7 +35,7 @@ from local_matrix_assistant.services.agent_history import (
 from local_matrix_assistant.ui.chat_panel import MessageInput
 from local_matrix_assistant.ui.agent_timeline import AgentEventCard, AgentTimeline
 from local_matrix_assistant.ui.agent_progress import AgentProgressCard
-from local_matrix_assistant.ui.brand import jarvis_mark
+from local_matrix_assistant.ui.brand import paco_mark
 from local_matrix_assistant.ui.diff_review import DiffReviewWidget
 from local_matrix_assistant.ui.status_panel import StatusPanel
 
@@ -114,8 +114,8 @@ class AgentPanel(QWidget):
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
-        self.jarvis_mark = jarvis_mark(20, accessible_name="Jarvis agent")
-        header_layout.addWidget(self.jarvis_mark)
+        self.paco_mark = paco_mark(20, accessible_name="Paco agent")
+        header_layout.addWidget(self.paco_mark)
         header = QLabel("Agent")
         header.setObjectName("messageRole")
         header_layout.addWidget(header)
@@ -421,7 +421,7 @@ class AgentPanel(QWidget):
         self.save_task_output_button.clicked.connect(self.request_save_selected_task_output)
 
     def set_active_folder(self, folder: str, *, workspace_scope: str | None = None) -> None:
-        visible = folder or "Documents\\Jarvis Files (default)"
+        visible = folder or "Documents\\Paco Files (default)"
         self._workspace_scope = (folder if workspace_scope is None else workspace_scope).strip()
         self.active_folder_label.setText(visible)
         self.active_folder_label.setToolTip(visible)

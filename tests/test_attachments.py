@@ -82,7 +82,7 @@ class AttachmentServiceTests(unittest.TestCase):
                 {NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)})}
             )
             stream = DecodedStreamObject()
-            stream.set_data(b"BT /F1 12 Tf 72 720 Td (Jarvis PDF extraction works) Tj ET")
+            stream.set_data(b"BT /F1 12 Tf 72 720 Td (Paco PDF extraction works) Tj ET")
             page[NameObject("/Contents")] = writer._add_object(stream)
             with path.open("wb") as handle:
                 writer.write(handle)
@@ -91,7 +91,7 @@ class AttachmentServiceTests(unittest.TestCase):
 
             self.assertEqual("PDF document", attachment.kind)
             self.assertIn("[Page 1]", attachment.content)
-            self.assertIn("Jarvis PDF extraction works", attachment.content)
+            self.assertIn("Paco PDF extraction works", attachment.content)
 
     def test_rejects_pdf_without_selectable_text(self) -> None:
         from pypdf import PdfWriter
@@ -217,7 +217,7 @@ class AttachmentServiceTests(unittest.TestCase):
         self.assertEqual(1, len(restored))
         self.assertEqual("notes.md", restored[0].name)
         self.assertEqual("# Saved snapshot", restored[0].content)
-        self.assertTrue(restored[0].path.startswith(".jarvis-history/turn-2"))
+        self.assertTrue(restored[0].path.startswith(".paco-history/turn-2"))
 
 
 if __name__ == "__main__":

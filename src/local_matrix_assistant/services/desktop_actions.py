@@ -132,7 +132,7 @@ class DesktopActionService:
         working_folders: list[str] | None = None,
         active_working_folder: str = "",
     ) -> None:
-        self.default_files_dir = default_files_dir or (Path.home() / "Documents" / "Jarvis Files")
+        self.default_files_dir = default_files_dir or (Path.home() / "Documents" / "Paco Files")
         self.update_working_folders(working_folders or [], active_working_folder)
 
     def update_working_folders(self, folders: list[str], active_folder: str = "") -> None:

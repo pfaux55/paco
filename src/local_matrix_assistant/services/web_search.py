@@ -171,7 +171,7 @@ class WebSearchService:
 
         opener = threading.Thread(
             target=open_request,
-            name="jarvis-web-search-connect",
+            name="paco-web-search-connect",
             daemon=True,
         )
         opener.start()

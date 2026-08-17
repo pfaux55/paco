@@ -22,7 +22,7 @@ class ProjectScriptServiceTests(unittest.TestCase):
     @staticmethod
     def build_service(root: Path) -> ProjectScriptService:
         desktop = DesktopActionService(
-            root.parent / "jarvis-files",
+            root.parent / "paco-files",
             working_folders=[str(root)],
             active_working_folder=str(root),
         )

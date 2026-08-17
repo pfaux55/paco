@@ -30,25 +30,25 @@ class AgentHistoryStoreTests(unittest.TestCase):
                         "Command",
                         "run tests",
                         "2026-07-28 10:20:30",
-                        workspace_path=r"D:\projects\jarvis",
+                        workspace_path=r"D:\projects\paco",
                         task_id="task_1",
                     ),
                     AgentHistoryEvent(
                         "Agent",
                         "Tests passed. ✓",
                         "2026-07-28 10:20:32",
-                        r"D:\projects\jarvis\report.docx",
+                        r"D:\projects\paco\report.docx",
                         "file",
                     ),
                 ],
                 execution_details="COMMAND\nrun tests\n\ntest_example ... ok\n",
-                active_folder=r"D:\projects\jarvis",
+                active_folder=r"D:\projects\paco",
                 timeline_filter="current",
                 task_details=[
                     AgentTaskDetail(
                         "task_1",
                         "run tests",
-                        r"D:\projects\jarvis",
+                        r"D:\projects\paco",
                         "2026-07-28 10:20:30",
                         "COMMAND\nrun tests\n\ntest_example ... ok\n",
                         "success",
@@ -138,7 +138,7 @@ class AgentHistoryStoreTests(unittest.TestCase):
                 {
                     "task_id": f"task_{index}",
                     "command": f"command {index}",
-                    "workspace_path": r"D:\projects\jarvis",
+                    "workspace_path": r"D:\projects\paco",
                     "started_at": "2026-07-28 10:20:30",
                     "content": str(index) * 10_000,
                 }

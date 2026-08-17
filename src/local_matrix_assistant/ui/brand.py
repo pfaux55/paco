@@ -9,14 +9,14 @@ from PySide6.QtWidgets import QLabel, QWidget
 
 
 ASSET_DIR = Path(__file__).resolve().parents[1] / "assets"
-JARVIS_ICON_PATH = ASSET_DIR / "jarvis_icon.png"
-JARVIS_WINDOWS_ICON_PATH = ASSET_DIR / "jarvis_icon.ico"
-WINDOWS_APP_ID = "Jarvis.LocalMatrixAssistant"
+PACO_ICON_PATH = ASSET_DIR / "paco_icon.png"
+PACO_WINDOWS_ICON_PATH = ASSET_DIR / "paco_icon.ico"
+WINDOWS_APP_ID = "Paco.LocalMatrixAssistant"
 _native_icon_handles: list[int] = []
 
 
-def jarvis_icon() -> QIcon:
-    return QIcon(str(JARVIS_WINDOWS_ICON_PATH))
+def paco_icon() -> QIcon:
+    return QIcon(str(PACO_WINDOWS_ICON_PATH))
 
 
 def configure_windows_app_identity() -> None:
@@ -48,7 +48,7 @@ def apply_windows_window_icon(window: QWidget) -> None:
 
     window_handle = ctypes.c_void_p(int(window.winId()))
     for icon_kind, size in ((1, 256), (0, 32)):
-        icon_handle = load_image(None, str(JARVIS_WINDOWS_ICON_PATH), 1, size, size, 0x0010)
+        icon_handle = load_image(None, str(PACO_WINDOWS_ICON_PATH), 1, size, size, 0x0010)
         if icon_handle:
             _native_icon_handles.append(int(icon_handle))
             send_message(window_handle, 0x0080, ctypes.c_void_p(icon_kind), icon_handle)
@@ -89,18 +89,18 @@ def bring_windows_window_to_front(window: QWidget) -> None:
     window.activateWindow()
 
 
-def jarvis_mark(
+def paco_mark(
     size: int,
     *,
     parent: QWidget | None = None,
-    accessible_name: str = "Jarvis",
+    accessible_name: str = "Paco",
 ) -> QLabel:
     label = QLabel(parent)
-    label.setObjectName("jarvisMark")
+    label.setObjectName("pacoMark")
     label.setAccessibleName(accessible_name)
     label.setFixedSize(size, size)
     label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-    pixmap = QPixmap(str(JARVIS_ICON_PATH)).scaled(
+    pixmap = QPixmap(str(PACO_ICON_PATH)).scaled(
         size,
         size,
         Qt.AspectRatioMode.KeepAspectRatio,

@@ -756,7 +756,6 @@ class VoiceWindowMixin:
     def _on_output_device_changed(self, index: int) -> None:
         persisted = self._update_config(playback_output_name=str(self.voice_panel.output_device_combo.itemData(index) or ""))
         self.player.set_output_device_name(self.config.playback_output_name)
-        self.startup_sequence.set_output_device_name(self.config.playback_output_name)
         if persisted:
             self.refresh_status()
 

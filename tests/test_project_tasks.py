@@ -19,7 +19,7 @@ from local_matrix_assistant.services.project_tasks import ProjectTaskPlan, Proje
 class ProjectTaskServiceTests(unittest.TestCase):
     def build_service(self, root: Path) -> ProjectTaskService:
         desktop = DesktopActionService(
-            root / "jarvis-files",
+            root / "paco-files",
             working_folders=[str(root)],
             active_working_folder=str(root),
         )

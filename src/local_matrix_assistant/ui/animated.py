@@ -16,17 +16,19 @@ class AnimatedSvgWidget(QWidget):
         source: str | Path,
         *,
         size: int = 24,
+        frames_per_second: int = 12,
         accessible_name: str = "Animated status indicator",
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._source = str(source)
+        self._frames_per_second = frames_per_second
         self._loaded = True
         self.setFixedSize(size, size)
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self.setAccessibleName(accessible_name)
         self._renderer = QSvgRenderer(self._source, self)
-        self._renderer.setFramesPerSecond(12)
+        self._renderer.setFramesPerSecond(self._frames_per_second)
         self._renderer.setAnimationEnabled(False)
         self._renderer.repaintNeeded.connect(self.update)
 
@@ -55,7 +57,7 @@ class AnimatedSvgWidget(QWidget):
     def showEvent(self, event) -> None:  # type: ignore[override]
         if not self._loaded:
             self._renderer.load(self._source)
-            self._renderer.setFramesPerSecond(12)
+            self._renderer.setFramesPerSecond(self._frames_per_second)
             self._loaded = True
         self._renderer.setAnimationEnabled(True)
         super().showEvent(event)

@@ -7,7 +7,7 @@ using System.Windows.Forms;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 
-internal static class JarvisLauncher
+internal static class PacoLauncher
 {
     [STAThread]
     private static void Main()
@@ -21,8 +21,8 @@ internal static class JarvisLauncher
         if (!File.Exists(python) || !File.Exists(entryPoint) || !File.Exists(ollamaStartup))
         {
             MessageBox.Show(
-                "Jarvis launcher could not find the app runtime.",
-                "Jarvis",
+                "Paco launcher could not find the app runtime.",
+                "Paco",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Error
             );
@@ -47,7 +47,7 @@ internal static class JarvisLauncher
         private readonly Timer runtimeStartupTimer;
         private readonly Timer windowActivationTimer;
         private readonly StringBuilder ollamaError = new StringBuilder();
-        private Process jarvisProcess;
+        private Process pacoProcess;
         private Process ollamaProcess;
         private System.Threading.EventWaitHandle startupReadyEvent;
         private int activationAttempts;
@@ -84,7 +84,7 @@ internal static class JarvisLauncher
             runtimeStartupTimer.Tick += RuntimeStartupTimedOut;
 
             windowActivationTimer = new Timer { Interval = 75 };
-            windowActivationTimer.Tick += ActivateJarvisWindow;
+            windowActivationTimer.Tick += ActivatePacoWindow;
         }
 
         protected override void OnShown(EventArgs eventArgs)
@@ -128,9 +128,9 @@ internal static class JarvisLauncher
                 {
                     ollamaProcess.Dispose();
                 }
-                if (jarvisProcess != null)
+                if (pacoProcess != null)
                 {
-                    jarvisProcess.Dispose();
+                    pacoProcess.Dispose();
                 }
                 if (startupReadyEvent != null)
                 {
@@ -178,7 +178,7 @@ internal static class JarvisLauncher
             }
             catch (Exception exception)
             {
-                ShowStartupError("Jarvis could not start its local runtime.\n\n" + exception.Message);
+                ShowStartupError("Paco could not start its local runtime.\n\n" + exception.Message);
             }
         }
 
@@ -202,7 +202,7 @@ internal static class JarvisLauncher
 
             try
             {
-                string startupEventName = "JarvisStartupReady_" + Process.GetCurrentProcess().Id + "_" + Guid.NewGuid().ToString("N");
+                string startupEventName = "PacoStartupReady_" + Process.GetCurrentProcess().Id + "_" + Guid.NewGuid().ToString("N");
                 startupReadyEvent = new System.Threading.EventWaitHandle(
                     false,
                     System.Threading.EventResetMode.ManualReset,
@@ -216,27 +216,27 @@ internal static class JarvisLauncher
                     UseShellExecute = false,
                     CreateNoWindow = true
                 };
-                startInfo.EnvironmentVariables["JARVIS_STARTUP_EVENT"] = startupEventName;
-                jarvisProcess = Process.Start(startInfo);
-                AllowSetForegroundWindow(jarvisProcess.Id);
+                startInfo.EnvironmentVariables["PACO_STARTUP_EVENT"] = startupEventName;
+                pacoProcess = Process.Start(startInfo);
+                AllowSetForegroundWindow(pacoProcess.Id);
                 activationAttempts = 0;
                 windowActivationTimer.Start();
             }
             catch (Exception exception)
             {
-                ShowStartupError("Jarvis could not open.\n\n" + exception.Message);
+                ShowStartupError("Paco could not open.\n\n" + exception.Message);
             }
         }
 
-        private void ActivateJarvisWindow(object sender, EventArgs eventArgs)
+        private void ActivatePacoWindow(object sender, EventArgs eventArgs)
         {
             activationAttempts++;
-            if (jarvisProcess == null || startupReadyEvent == null)
+            if (pacoProcess == null || startupReadyEvent == null)
             {
-                ShowStartupError("Jarvis startup state was lost before its window opened.");
+                ShowStartupError("Paco startup state was lost before its window opened.");
                 return;
             }
-            jarvisProcess.Refresh();
+            pacoProcess.Refresh();
 
             if (startupReadyEvent.WaitOne(0))
             {
@@ -245,17 +245,17 @@ internal static class JarvisLauncher
                 return;
             }
 
-            if (jarvisProcess.HasExited)
+            if (pacoProcess.HasExited)
             {
-                ShowStartupError("Jarvis closed before its window opened.");
+                ShowStartupError("Paco closed before its window opened.");
                 return;
             }
 
             int timeoutAttempts = WindowStartupTimeoutMilliseconds / windowActivationTimer.Interval;
             if (activationAttempts >= timeoutAttempts)
             {
-                StopProcess(jarvisProcess);
-                ShowStartupError("Jarvis did not finish opening within 45 seconds. The stalled startup was stopped; try opening Jarvis again.");
+                StopProcess(pacoProcess);
+                ShowStartupError("Paco did not finish opening within 45 seconds. The stalled startup was stopped; try opening Paco again.");
             }
         }
 
@@ -300,7 +300,7 @@ internal static class JarvisLauncher
             runtimeStartupTimer.Stop();
             windowActivationTimer.Stop();
             Hide();
-            MessageBox.Show(message, "Jarvis", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(message, "Paco", MessageBoxButtons.OK, MessageBoxIcon.Error);
             Close();
         }
 

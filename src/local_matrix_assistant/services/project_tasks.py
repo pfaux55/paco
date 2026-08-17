@@ -236,7 +236,7 @@ class ProjectTaskService:
             finally:
                 output_queue.put(None)
 
-        reader = threading.Thread(target=read_output, name="jarvis-project-output", daemon=True)
+        reader = threading.Thread(target=read_output, name="paco-project-output", daemon=True)
         reader.start()
         started = time.monotonic()
         output_characters = 0

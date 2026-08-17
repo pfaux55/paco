@@ -13,14 +13,14 @@ from local_matrix_assistant.ui.brand import (
     apply_windows_window_icon,
     bring_windows_window_to_front,
     configure_windows_app_identity,
-    jarvis_icon,
+    paco_icon,
 )
 from local_matrix_assistant.ui.main_window import MainWindow
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
 
 
 def _signal_launcher_ready() -> None:
-    event_name = os.environ.pop("JARVIS_STARTUP_EVENT", "")
+    event_name = os.environ.pop("PACO_STARTUP_EVENT", "")
     if sys.platform != "win32" or not event_name:
         return
 
@@ -56,7 +56,7 @@ def main() -> int:
     configure_windows_app_identity()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
-    app.setWindowIcon(jarvis_icon())
+    app.setWindowIcon(paco_icon())
     app.setStyleSheet(stylesheet_for_theme(config.theme))
     app.setFont(QFont("Consolas", 10))
 

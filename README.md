@@ -1,6 +1,6 @@
-# Jarvis — Local Matrix Assistant
+# Paco — Local Matrix Assistant
 
-Jarvis is a local-first Windows desktop AI assistant with a custom PySide6 interface. It combines private Ollama inference, conversational workspace automation, reviewed code generation and editing, bounded command execution, offline speech recognition, offline speech synthesis, optional source-backed web search, and persistent local history in a black-and-green Matrix-style UI.
+Paco is a local-first Windows desktop AI assistant with a custom PySide6 interface. It combines private Ollama inference, conversational workspace automation, reviewed code generation and editing, bounded command execution, offline speech recognition, offline speech synthesis, optional source-backed web search, and persistent local history in a black-and-green Matrix-style UI.
 
 The application is designed around one rule: conversational convenience must not silently bypass review boundaries. Read-only investigation may run directly, generated or edited code is shown as a diff before writing, and generated Python runs only after the user approves `Create & Run`.
 
@@ -29,8 +29,8 @@ The application is designed around one rule: conversational convenience must not
 Prerequisites: Windows 10/11, Python 3.12+, and [Ollama](https://ollama.com/) running locally.
 
 ```bat
-git clone <repository-url> jarvis
-cd jarvis
+git clone <repository-url> paco
+cd paco
 python -m venv .venv-win
 .venv-win\Scripts\python.exe -m pip install --upgrade pip
 .venv-win\Scripts\python.exe -m pip install -r requirements.txt
@@ -129,7 +129,9 @@ Run the automated test suite before making changes:
 ## Project Layout
 
 - `run_assistant.py`
+- `run_compact_assistant.py`
 - `src/local_matrix_assistant/app.py`
+- `src/local_matrix_assistant/compact_app.py`
 - `src/local_matrix_assistant/ui/main_window.py`
 - `src/local_matrix_assistant/ui/chat_panel.py`
 - `src/local_matrix_assistant/ui/agent_panel.py`
@@ -195,6 +197,12 @@ or
 .venv-win\Scripts\python.exe run_assistant.py
 ```
 
+Launch the session-only, always-on-top screen assistant without opening the full app:
+
+```bat
+.venv-win\Scripts\python.exe run_compact_assistant.py
+```
+
 ## Voice Tab
 
 The Voice tab lets you:
@@ -210,7 +218,7 @@ The Voice tab lets you:
 
 Voice Only listens for sustained speech and sends after roughly 0.9 seconds of trailing silence. A second tap still sends immediately, and a 30-second local safety limit prevents abandoned captures from recording indefinitely. The waveform responds to the real microphone signal; voice activity detection, transcription, and synthesis all remain on-device.
 
-A separate four-second frame watchdog protects against USB, Bluetooth, or virtual microphone loss where the audio backend remains open but stops delivering samples. Jarvis cancels that capture, invalidates stale transcription callbacks, refreshes device status, and shows recovery guidance directly in Voice Only. Leaving Voice Only always cancels active capture immediately.
+A separate four-second frame watchdog protects against USB, Bluetooth, or virtual microphone loss where the audio backend remains open but stops delivering samples. Paco cancels that capture, invalidates stale transcription callbacks, refreshes device status, and shows recovery guidance directly in Voice Only. Leaving Voice Only always cancels active capture immediately.
 
 Voice Only reports elapsed on-device transcription and first-audio synthesis time. A 30-second transcription limit or 20-second per-segment synthesis limit detaches a stalled worker, restores an actionable UI, and increments the existing generation id so any late text or audio is discarded. If a prefetched later speech segment stalls, the segment already playing may finish while the remaining response stays available in chat.
 
@@ -222,7 +230,7 @@ Speaker cleanup is exception-safe. If an output disappears during playback, queu
 
 ## Chat File Attachments
 
-Use `+ File`, drop files onto the Chat composer, or copy an image and press `Ctrl+V` in the composer. Clipboard images appear immediately in the local attachment tray and do not require a temporary file. Jarvis reads text, source code, configuration, CSV, `.docx`, and text-based PDF files locally. JPEG, PNG, WebP, BMP, GIF, and clipboard images are resized and encoded locally before being sent to Ollama. Attachment extraction runs in the worker pool so large documents cannot freeze the interface.
+Use `+ File`, drop files onto the Chat composer, or copy an image and press `Ctrl+V` in the composer. Clipboard images appear immediately in the local attachment tray and do not require a temporary file. Paco reads text, source code, configuration, CSV, `.docx`, and text-based PDF files locally. JPEG, PNG, WebP, BMP, GIF, and clipboard images are resized and encoded locally before being sent to Ollama. Attachment extraction runs in the worker pool so large documents cannot freeze the interface.
 
 Up to five files and three images can be attached at once. Text files are limited to 2 MB; PDFs, Word documents, and images are limited to 12 MB. Extracted text, PDF pages, image dimensions, and encoded image size are capped to keep local models responsive. Scanned PDFs without selectable text require OCR and are rejected with guidance.
 
@@ -259,15 +267,15 @@ Deleting a chat requires a second confirmation click within five seconds. Press 
 
 Conversation summaries are cached in a small corruption-safe local index, so routine sidebar refreshes do not reread every chat file. Full-text searches run in the worker pool and discard stale results when the query changes. Search content remains local; the index stores only summary metadata and rebuilds automatically if it is missing or malformed.
 
-Long conversations reopen at the latest message without constructing every historical message widget. Jarvis renders the newest 40 messages first; use `Load earlier messages` at the top of the conversation to prepend older messages in anchored batches without losing the current reading position. Streaming follows the newest token only while the reader remains near the bottom; scrolling upward preserves the reading position and reveals `Jump to latest`. All messages remain stored locally and available for editing, search, and model context.
+Long conversations reopen at the latest message without constructing every historical message widget. Paco renders the newest 40 messages first; use `Load earlier messages` at the top of the conversation to prepend older messages in anchored batches without losing the current reading position. Streaming follows the newest token only while the reader remains near the bottom; scrolling upward preserves the reading position and reveals `Jump to latest`. All messages remain stored locally and available for editing, search, and model context.
 
-  The navigation and history sidebar can be hidden with `Ctrl+B`. Its wide-window preference persists between launches. Below 1060px, Jarvis automatically uses a compact layout: navigation opens as a full-width screen and composer controls wrap without clipping.
+  The navigation and history sidebar can be hidden with `Ctrl+B`. Its wide-window preference persists between launches. Below 1060px, Paco automatically uses a compact layout: navigation opens as a full-width screen and composer controls wrap without clipping.
 
-Jarvis also restores the last active tab and validated window geometry. Geometry that is malformed or no longer intersects an available monitor is discarded, and the app opens maximized instead of becoming inaccessible off-screen.
+Paco also restores the last active tab and validated window geometry. Geometry that is malformed or no longer intersects an available monitor is discarded, and the app opens maximized instead of becoming inaccessible off-screen.
 
 The older legacy single-file history at `data/conversation_history.json` is migrated into the new format when needed.
 
-Settings are written through an atomic replacement and mirrored to `data/settings.json.bak`. If the primary file is incomplete or corrupt, Jarvis restores the last valid backup. Rapid voice rate and volume changes are debounced to keep slider interaction responsive.
+Settings are written through an atomic replacement and mirrored to `data/settings.json.bak`. If the primary file is incomplete or corrupt, Paco restores the last valid backup. Rapid voice rate and volume changes are debounced to keep slider interaction responsive.
 
 ## Keyboard Shortcuts
 
@@ -315,9 +323,9 @@ The Chat composer includes model profiles:
 
 Routing is tuned for an 8 GB-class GPU. On the current RTX 2070 setup, Auto prefers `llama3.2:3b` for fast requests, `qwen3.5:4b` for balanced/reasoning and image work, and `qwen2.5-coder:7b` for coding. Image prompts cannot be sent to text-only models; they route to an installed vision-capable model or remain safely unsent with clear guidance. Oversized models such as `mistral-nemo` are excluded from automatic routing when safer installed models are available. Each response shows the selected profile and model.
 
-Settings includes a curated local-model installer for the RTX 2070 profile. Choose Fast, Balanced + Vision, or Coding, then select `Install`. Jarvis streams Ollama's download status, allows cancellation, refreshes the installed-model list on success, and selects the new model. Ollama manages the model storage; cancellation may leave reusable partial download data.
+Settings includes a curated local-model installer for the RTX 2070 profile. Choose Fast, Balanced + Vision, or Coding, then select `Install`. Paco streams Ollama's download status, allows cancellation, refreshes the installed-model list on success, and selects the new model. Ollama manages the model storage; cancellation may leave reusable partial download data.
 
-Each profile also reserves model-specific space for the response. Chat context is selected by a conservative token estimate instead of a fixed message count. Jarvis retains complete recent user/assistant turns, limits web-search material, and only shortens the middle of the newest prompt when that prompt cannot fit. The composer reports when context was adjusted.
+Each profile also reserves model-specific space for the response. Chat context is selected by a conservative token estimate instead of a fixed message count. Paco retains complete recent user/assistant turns, limits web-search material, and only shortens the middle of the newest prompt when that prompt cannot fit. The composer reports when context was adjusted.
 
 Long chats retain continuity through bounded conversation memory. When complete older turns no longer fit, the active local model compresses requirements, preferences, decisions, outcomes, and unresolved work into the chat's JSON record before answering. Memory updates stay local, cannot execute transcript commands, and fall back to safe extractive notes if Ollama cannot summarize. Conversation records are written atomically to reduce corruption risk.
 
@@ -366,11 +374,11 @@ Use the `Agent` tab for natural conversation plus file, workspace, project, and 
 
 Agent results appear as command, result, and error cards in a bounded task timeline. Command cards show the workspace in which they were issued. The timeline can show `Current workspace` or `All workspaces`; legacy unscoped cards remain available in the all-workspaces view. Each command shows its live or final state and duration: running, review, approval, success, error, canceled, blocked, discarded, or interrupted after a restart. `Execution` offers an `All tasks` log and isolated output for each recorded command, labeled with state, duration, time, workspace, and command. Streaming output, proposal review, apply results, test output, rejection, cancellation, and errors stay grouped with the initiating command. `Details` on a command card opens its exact persisted record. The selected output can be copied exactly or saved as `.txt`, `.log`, or `.md` through a non-modal dialog. Exports use atomic replacement, must remain inside an allowed Agent folder, and are disabled under Read-only access. Legacy history without task records remains available through All tasks. `Use Again` restores the exact text to the composer for editing, never runs automatically, and refuses to restore a scoped command when a different Agent folder is active. Legacy unscoped events remain usable. Recall is unavailable during active work or a pending script approval. Long model and test tasks show a live phase, elapsed time, a task-local Stop control, and completed, failed, or stopped state. Created, edited, and exported files include validated `Open File` and `Open Folder` controls that persist across restarts. Missing and out-of-scope paths fail safely. Source and text artifacts use Windows' edit action, while executable, installer, and shortcut artifacts expose only `Open Folder` so generated results cannot launch them directly. Test runs open Execution automatically, while the timeline remains available after completion. The latest 80 events, 40 per-task records, 200,000 characters of combined per-task output, and 200,000 characters of All tasks output persist locally in `data/agent_history.json`; malformed history is ignored safely. `Clear All` requires a second click within five seconds, always covers hidden workspace cards and all output records, and can be canceled with `Escape`.
 
-Choose the working folder directly in the `Agent` tab. It receives relative file commands; without one, files use `Documents/Jarvis Files`. Absolute paths must stay inside the chosen folder or the default Jarvis folder. Natural Word requests use the selected local Ollama model to draft structured content and save a valid `.docx`; if drafting is unavailable, the Agent still creates an editable outline. Explicit filenames are never overwritten, while automatic document names receive a numeric suffix when needed. App launches use known Windows apps, Start menu shortcuts, or explicit `.exe`/`.lnk` paths without invoking a command shell.
+Choose the working folder directly in the `Agent` tab. It receives relative file commands; without one, files use `Documents/Paco Files`. Absolute paths must stay inside the chosen folder or the default Paco folder. Natural Word requests use the selected local Ollama model to draft structured content and save a valid `.docx`; if drafting is unavailable, the Agent still creates an editable outline. Explicit filenames are never overwritten, while automatic document names receive a numeric suffix when needed. App launches use known Windows apps, Start menu shortcuts, or explicit `.exe`/`.lnk` paths without invoking a command shell.
 
 The `Access` control is saved separately for each Agent workspace. `Standard access` permits explicit file creation, reviewed model edits, and the existing approved project workflows. `Read-only` permits bounded list, read, search, analysis, and planned investigation commands, while blocking direct and model-generated file creation, replacements, edits, fixes, formatting, tests, builds, lint, and project scripts before model or tool execution. App launching remains available because it is outside workspace access. Switching to Read-only discards a pending edit and cancels pending script approval. Modes persist in bounded, atomic `data/agent_permissions.json`; malformed or unreadable permission data fails closed to Read-only until the user explicitly selects a mode.
 
-Workspace inspection is recursive but bounded, skips dependency/cache folders, rejects path escapes and binary or oversized files, and caps displayed output. Exact replacements refuse ambiguous multiple matches unless `replace all` is explicit. Natural-language `edit file` commands route to the coding model and produce a diff without changing the file. The user must select `Apply Edit`; Agent then revalidates Python, JSON, or TOML, detects concurrent file changes, stores a backup under `Documents/Jarvis Files/.jarvis-backups`, and replaces the file atomically. `Discard` leaves the file unchanged.
+Workspace inspection is recursive but bounded, skips dependency/cache folders, rejects path escapes and binary or oversized files, and caps displayed output. Exact replacements refuse ambiguous multiple matches unless `replace all` is explicit. Natural-language `edit file` commands route to the coding model and produce a diff without changing the file. The user must select `Apply Edit`; Agent then revalidates Python, JSON, or TOML, detects concurrent file changes, stores a backup under `Documents/Paco Files/.paco-backups`, and replaces the file atomically. `Discard` leaves the file unchanged.
 
 `analyze workspace`, `explain project`, and `investigate` commands build a local, source-grounded view of the selected folder. Agent ranks filenames and file contents against the question, sends at most six bounded line-numbered excerpts to the stronger reasoning model, lists every source reviewed, and reports when scan limits were reached. Dependency/cache directories, binary files, oversized files, `.env` variants, credential files, and private-key formats are excluded. Analysis is read-only and treats repository text as untrusted evidence rather than instructions.
 
@@ -384,19 +392,19 @@ Reviewable edits use a highlighted unified-diff viewer with addition, deletion, 
 
 Natural-language new-file requests such as `create a Python file src/health.py that exposes a health check` also route to the coding model, but remain a preview until `Create File` is selected. Paths are validated before model work, generated Python/JSON/TOML is parsed before preview and again before creation, and exclusive creation refuses to overwrite a file that appears after review. Literal commands using `with content`, `containing`, or `that contains` still write exactly the supplied text without model generation.
 
-Create-and-run requests such as `build a Python file that prints the first five squares then run it` produce a complete Python proposal and a `Create & Run` approval action. After approval, Jarvis creates the reviewed file exclusively and launches it with the selected workspace virtual-environment interpreter, or the application interpreter when no workspace environment exists. The runner never invokes a shell, provides no interactive stdin, captures combined stdout/stderr, enforces a 60-second timeout, supports cancellation, and reports the exit result. Existing scripts can be invoked with `run path/to/script.py`; contextual follow-ups such as `run it` resolve the recent reviewed artifact through the Agent conversation router.
+Create-and-run requests such as `build a Python file that prints the first five squares then run it` produce a complete Python proposal and a `Create & Run` approval action. After approval, Paco creates the reviewed file exclusively and launches it with the selected workspace virtual-environment interpreter, or the application interpreter when no workspace environment exists. The runner never invokes a shell, provides no interactive stdin, captures combined stdout/stderr, enforces a 60-second timeout, supports cancellation, and reports the exit result. Existing scripts can be invoked with `run path/to/script.py`; contextual follow-ups such as `run it` resolve the recent reviewed artifact through the Agent conversation router.
 
 Explicit `edit files` commands accept two to four comma-separated paths. The coding model first creates a coordinated implementation plan, then produces a combined validated diff. Apply verifies every file before writing, creates all backups first, and treats the batch as a transaction: if a later write fails, previously changed files are restored automatically.
 
 `run tests`, `build project`, `run lint`, and `check formatting` detect Python, npm, or Cargo projects and execute only a known tool or configured script through a fixed argument list. Output streams into Agent with a fixed size limit. Runs have a three-minute timeout and a task-specific Stop control that terminates the process tree. Python supports unittest/pytest, package builds, Ruff/Flake8/Pylint, and non-writing Ruff/Black format checks. Node requires the matching `test`, `build`, `lint`, or explicit format-check package script. Rust uses Cargo test/build, Clippy, and `cargo fmt --check`. Optional test targets must remain inside the selected workspace. `check formatting` never writes source files. Model-backed Agent work reports its current scan, plan, draft, and validation phase and exposes `Stop Agent`; cancellation works while Ollama is loading or generating and never applies a partial proposal.
 
-`format project` uses Ruff or Black for Python, Prettier for Node, and rustfmt for Rust. The formatter runs against a bounded temporary workspace copy. Jarvis compares the result with unchanged source files, displays a per-file unified diff for up to 40 changed files, and offers `Apply Formatting`, `Apply & Test`, or `Discard`. Applying revalidates every original digest, creates backups, and uses the existing transactional batch writer; cancellation, formatter failure, concurrent source changes, and discarded previews never apply staged output.
+`format project` uses Ruff or Black for Python, Prettier for Node, and rustfmt for Rust. The formatter runs against a bounded temporary workspace copy. Paco compares the result with unchanged source files, displays a per-file unified diff for up to 40 changed files, and offers `Apply Formatting`, `Apply & Test`, or `Discard`. Applying revalidates every original digest, creates backups, and uses the existing transactional batch writer; cancellation, formatter failure, concurrent source changes, and discarded previews never apply staged output.
 
-`list project scripts` reads the bounded `scripts` section from the selected folder's `package.json` without executing anything. `run project script <name>` displays the exact configured command, working folder, and a standard or high-risk warning in Agent. The script runs only after `Run Script` is selected. Jarvis revalidates the unchanged `package.json` immediately before launch, streams bounded output, supports cancellation and timeout, and does not persist pending approvals. The explicit npm script runs through the platform shell, while automatic `pre<name>` and `post<name>` lifecycle hooks are suppressed.
+`list project scripts` reads the bounded `scripts` section from the selected folder's `package.json` without executing anything. `run project script <name>` displays the exact configured command, working folder, and a standard or high-risk warning in Agent. The script runs only after `Run Script` is selected. Paco revalidates the unchanged `package.json` immediately before launch, streams bounded output, supports cancellation and timeout, and does not persist pending approvals. The explicit npm script runs through the platform shell, while automatic `pre<name>` and `post<name>` lifecycle hooks are suppressed.
 
 ## Architecture
 
-Jarvis uses a layered design:
+Paco uses a layered design:
 
 1. `run_assistant.py` adds `src/` to the import path and starts the application.
 2. `app.py` creates the Qt application and main window.
@@ -504,4 +512,4 @@ The notice bar below the header prioritizes unsaved-settings errors, then local 
 
 ## Project Status
 
-Jarvis is an actively developed personal desktop application. Windows is the primary supported platform because app launching, audio fallback, batch launchers, and parts of process management use Windows-specific behavior. Linux launch support exists for basic development through `scripts/run_local.sh`, but parity is not guaranteed.
+Paco is an actively developed personal desktop application. Windows is the primary supported platform because app launching, audio fallback, batch launchers, and parts of process management use Windows-specific behavior. Linux launch support exists for basic development through `scripts/run_local.sh`, but parity is not guaranteed.
