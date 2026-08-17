@@ -13,6 +13,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from PySide6.QtCore import QPoint
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QWidget
 
@@ -59,6 +60,43 @@ class StartupSequenceTests(unittest.TestCase):
         self.assertTrue(sequence.overlay._animation_group.state())
         QTest.qWait(200)
         self.assertGreater(sequence.overlay._intro_progress, 0.0)
+        root.close()
+
+    def test_first_painted_intro_frame_reports_launcher_handoff_ready(self) -> None:
+        root = QWidget()
+        root.resize(800, 600)
+        sequence = StartupSequence(app_name="Paco", root=root)
+        ready = []
+        sequence.first_frame_ready.connect(lambda: ready.append(True))
+        root.show()
+        sequence.begin()
+        QTest.qWait(30)
+
+        self.assertEqual([True], ready)
+        root.close()
+
+    def test_launcher_ring_stays_on_exact_screen_center_through_handoff(self) -> None:
+        root = QWidget()
+        root.resize(800, 600)
+        root.move(200, 100)
+        launcher_center = QPoint(600, 400)
+        environment = {
+            "PACO_STARTUP_EVENT": "test-event",
+            "PACO_STARTUP_RING_CENTER_X": str(launcher_center.x()),
+            "PACO_STARTUP_RING_CENTER_Y": str(launcher_center.y()),
+        }
+        with patch.dict(os.environ, environment):
+            sequence = StartupSequence(app_name="Paco", root=root)
+        root.show()
+        sequence.begin()
+        QTest.qWait(500)
+
+        ring = sequence.overlay._pulse_indicator
+        self.assertEqual(launcher_center, ring.pos() + QPoint(ring.width() // 2, ring.height() // 2))
+        self.assertEqual(
+            sequence.overlay.mapFromGlobal(launcher_center),
+            sequence.overlay._intro_center(),
+        )
         root.close()
 
 

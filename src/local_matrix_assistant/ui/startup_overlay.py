@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
+import os
 
 from PySide6.QtCore import (
     QEasingCurve,
@@ -11,25 +11,31 @@ from PySide6.QtCore import (
     QPropertyAnimation,
     QRect,
     QSequentialAnimationGroup,
+    QTimer,
     Qt,
     Signal,
 )
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QLabel, QWidget
 
-from local_matrix_assistant.ui.animated import AnimatedSvgWidget
+from local_matrix_assistant.ui.startup_ring import RING_SIZE, StartupRing, launcher_ring_center
 
 
 class StartupOverlay(QWidget):
     finished = Signal()
+    first_frame_ready = Signal()
 
     def __init__(self, app_name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._intro_progress = 0.0
         self._reveal_progress = 0.0
         self._overlay_opacity = 0.0
+        self._ring_position_progress = 1.0
         self._started = False
         self._finished = False
+        self._first_frame_reported = False
+        self._launcher_ring_center = launcher_ring_center()
+        self._launcher_handoff = bool(os.environ.get("PACO_STARTUP_EVENT"))
         self._background_cache = QPixmap()
 
         self.setObjectName("startupOverlay")
@@ -49,18 +55,21 @@ class StartupOverlay(QWidget):
         self._status.setObjectName("startupStatus")
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        pulse_path = Path(__file__).resolve().parents[1] / "assets" / "svg-spinners" / "270-ring-with-bg.svg"
-        self._pulse_indicator = AnimatedSvgWidget(
-            pulse_path,
-            size=160,
-            frames_per_second=30,
-            accessible_name="Paco startup in progress",
-            parent=self,
-        )
+        self._ring_is_handoff_window = self._launcher_ring_center is not None
+        self._pulse_indicator = StartupRing(self)
+        if self._ring_is_handoff_window:
+            self._pulse_indicator.setWindowFlags(
+                Qt.WindowType.Tool
+                | Qt.WindowType.FramelessWindowHint
+                | Qt.WindowType.WindowTransparentForInput
+                | Qt.WindowType.NoDropShadowWindowHint
+            )
+            self._pulse_indicator.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self._pulse_opacity = QGraphicsOpacityEffect(self._pulse_indicator)
         self._pulse_indicator.setGraphicsEffect(self._pulse_opacity)
         self._pulse_opacity.setOpacity(0.0)
-        self._pulse_indicator.lower()
+        if not self._ring_is_handoff_window:
+            self._pulse_indicator.lower()
 
         self._title_opacity = QGraphicsOpacityEffect(self._title)
         self._eyebrow_opacity = QGraphicsOpacityEffect(self._eyebrow)
@@ -104,6 +113,19 @@ class StartupOverlay(QWidget):
 
     overlay_opacity = Property(float, get_overlay_opacity, set_overlay_opacity)
 
+    def get_ring_position_progress(self) -> float:
+        return self._ring_position_progress
+
+    def set_ring_position_progress(self, value: float) -> None:
+        self._ring_position_progress = max(0.0, min(1.0, value))
+        self._update_ring_geometry()
+
+    ring_position_progress = Property(
+        float,
+        get_ring_position_progress,
+        set_ring_position_progress,
+    )
+
     def start(self) -> None:
         if self._started:
             return
@@ -111,8 +133,12 @@ class StartupOverlay(QWidget):
         self.set_intro_progress(0.0)
         self.set_reveal_progress(0.0)
         self.set_overlay_opacity(0.0)
+        self.set_ring_position_progress(0.0 if self._launcher_ring_center is not None else 1.0)
         self.show()
         self.raise_()
+        if self._ring_is_handoff_window:
+            self._pulse_indicator.show()
+            self._pulse_indicator.raise_()
         self.setFocus(Qt.FocusReason.OtherFocusReason)
         self._update_label_geometry()
         self._build_animation().start()
@@ -158,7 +184,7 @@ class StartupOverlay(QWidget):
             painter.drawLine(0, y, rect.width(), y)
         painter.setOpacity(1.0)
 
-        center = QPoint(rect.center().x(), max(120, rect.center().y() - 40))
+        center = self._intro_center()
         base_radius = min(rect.width(), rect.height()) * 0.18
         energy = min(1.0, self._intro_progress * 1.2)
         pulse = (math.sin(self._intro_progress * math.pi * 6.0) * 0.5 + 0.5) * energy
@@ -187,6 +213,9 @@ class StartupOverlay(QWidget):
         glow_pen = QPen(QColor(196, 255, 226, int(180 * (1.0 - self._reveal_progress))), 1)
         painter.setPen(glow_pen)
         painter.drawLine(center.x() - 170, baseline + 24, center.x() + 170, baseline + 24)
+        if not self._first_frame_reported:
+            self._first_frame_reported = True
+            QTimer.singleShot(0, self.first_frame_ready.emit)
 
     def _build_animation(self) -> QSequentialAnimationGroup:
         self._animation_group = QSequentialAnimationGroup(self)
@@ -202,6 +231,17 @@ class StartupOverlay(QWidget):
         intro_progress.setStartValue(0.0)
         intro_progress.setEndValue(1.0)
         intro_progress.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+        ring_position = QPropertyAnimation(self, b"ring_position_progress", self)
+        ring_position.setDuration(300)
+        ring_position.setStartValue(self._ring_position_progress)
+        ring_position.setEndValue(1.0)
+        ring_position.setEasingCurve(QEasingCurve.Type.InOutCubic)
+
+        ring_handoff = QSequentialAnimationGroup(self)
+        if self._launcher_ring_center is not None:
+            ring_handoff.addPause(280)
+        ring_handoff.addAnimation(ring_position)
 
         eyebrow_fade = QPropertyAnimation(self._eyebrow_opacity, b"opacity", self)
         eyebrow_fade.setDuration(320)
@@ -254,6 +294,7 @@ class StartupOverlay(QWidget):
         intro_group = QParallelAnimationGroup(self)
         intro_group.addAnimation(overlay_fade_in)
         intro_group.addAnimation(intro_progress)
+        intro_group.addAnimation(ring_handoff)
 
         title_group = QSequentialAnimationGroup(self)
         title_group.addPause(120)
@@ -281,6 +322,7 @@ class StartupOverlay(QWidget):
         if self._finished:
             return
         self._finished = True
+        self._pulse_indicator.hide()
         self.hide()
         self.finished.emit()
 
@@ -292,12 +334,29 @@ class StartupOverlay(QWidget):
         self._eyebrow.setGeometry(QRect(0, title_top, rect.width(), 28))
         self._title.setGeometry(QRect(0, title_top + 26, rect.width(), 48))
         self._status.setGeometry(QRect(0, title_top + 82, rect.width(), 28))
-        pulse_center_y = max(120, rect.center().y() - 40)
-        pulse_size = self._pulse_indicator.width()
-        self._pulse_indicator.move(
-            rect.center().x() - (pulse_size // 2),
-            pulse_center_y - (pulse_size // 2),
+        self._update_ring_geometry()
+
+    def _update_ring_geometry(self) -> None:
+        target_center = self._intro_center()
+        start_center = target_center
+        if self._launcher_ring_center is not None:
+            start_center = self.mapFromGlobal(self._launcher_ring_center)
+        progress = self._ring_position_progress
+        center = QPoint(
+            round(start_center.x() + ((target_center.x() - start_center.x()) * progress)),
+            round(start_center.y() + ((target_center.y() - start_center.y()) * progress)),
         )
+        if self._ring_is_handoff_window:
+            center = self.mapToGlobal(center)
+        self._pulse_indicator.move(
+            center.x() - (RING_SIZE // 2),
+            center.y() - (RING_SIZE // 2),
+        )
+
+    def _intro_center(self) -> QPoint:
+        if self._launcher_ring_center is not None:
+            return self.mapFromGlobal(self._launcher_ring_center)
+        return self.rect().center()
 
     def _rebuild_background_cache(self) -> None:
         if self.width() <= 0 or self.height() <= 0:
@@ -312,4 +371,5 @@ class StartupOverlay(QWidget):
         painter.end()
 
     def _sync_pulse_opacity(self) -> None:
-        self._pulse_opacity.setOpacity(self._overlay_opacity * (1.0 - self._reveal_progress))
+        entrance_opacity = 0.92 if self._launcher_handoff else (0.92 * self._overlay_opacity)
+        self._pulse_opacity.setOpacity(entrance_opacity * (1.0 - self._reveal_progress))

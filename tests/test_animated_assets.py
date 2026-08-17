@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 from xml.etree import ElementTree
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import QApplication
 
 from local_matrix_assistant.ui.animated import AnimatedSvgWidget
 from local_matrix_assistant.ui.startup_overlay import StartupOverlay
+from local_matrix_assistant.ui.startup_ring import RING_GRADIENT, RING_SIZE, RING_STROKE_WIDTH, StartupRing
 
 
 class AnimatedAssetTests(unittest.TestCase):
@@ -67,13 +69,23 @@ class AnimatedAssetTests(unittest.TestCase):
                         self.assertNotIn(name.rsplit("}", 1)[-1].lower(), {"href", "src"})
                         self.assertNotIn("url(", value.lower())
 
-    def test_startup_overlay_uses_the_bundled_animation(self) -> None:
+    def test_startup_overlay_uses_the_fixed_launcher_ring(self) -> None:
         overlay = StartupOverlay("Paco")
-        self.assertTrue(overlay._pulse_indicator.is_valid)
-        self.assertTrue(overlay._pulse_indicator.is_animated)
-        self.assertEqual(30, overlay._pulse_indicator._frames_per_second)
+        self.assertIsInstance(overlay._pulse_indicator, StartupRing)
+        self.assertEqual(RING_SIZE, overlay._pulse_indicator.width())
+        self.assertEqual(8.0, RING_STROKE_WIDTH)
+        self.assertEqual((112, 255, 184), RING_GRADIENT[0])
+        self.assertEqual((112, 255, 184), RING_GRADIENT[-1])
         overlay.close()
         overlay.deleteLater()
+
+    def test_startup_ring_uses_shared_clock_phase(self) -> None:
+        with patch.dict(os.environ, {"PACO_STARTUP_RING_STARTED_MS": "1000"}):
+            ring = StartupRing()
+        self.assertAlmostEqual(0.0, ring.angle_at(1000))
+        self.assertAlmostEqual(5.5, ring.angle_at(1016))
+        ring.close()
+        ring.deleteLater()
 
 
 if __name__ == "__main__":

@@ -74,6 +74,31 @@ QWidget#compactTranscriptHost {
     background: transparent;
     border: none;
 }
+QScrollArea#compactTranscript QScrollBar:vertical {
+    background: transparent;
+    border: none;
+    width: 8px;
+    margin: 3px 0;
+}
+QScrollArea#compactTranscript QScrollBar::handle:vertical {
+    background: #35684a;
+    border: none;
+    border-radius: 4px;
+    min-height: 30px;
+}
+QScrollArea#compactTranscript QScrollBar::handle:vertical:hover {
+    background: #24e081;
+}
+QScrollArea#compactTranscript QScrollBar::add-line:vertical,
+QScrollArea#compactTranscript QScrollBar::sub-line:vertical {
+    background: transparent;
+    border: none;
+    height: 0;
+}
+QScrollArea#compactTranscript QScrollBar::add-page:vertical,
+QScrollArea#compactTranscript QScrollBar::sub-page:vertical {
+    background: transparent;
+}
 QFrame#compactInputBar {
     background: #07100b;
     border: 1px solid #24583c;
@@ -132,15 +157,6 @@ QPushButton#compactMainButton:hover,
 QPushButton#compactCloseButton:hover {
     background: #102b1c;
     color: #e4eee7;
-}
-QPushButton#compactSendButton {
-    background: #24e081;
-    border: none;
-    border-radius: 16px;
-    color: #031009;
-    font-size: 18px;
-    font-weight: 800;
-    padding: 0;
 }
 QLineEdit#compactPromptInput {
     background: transparent;

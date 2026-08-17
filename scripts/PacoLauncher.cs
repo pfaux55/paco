@@ -38,6 +38,16 @@ internal static class PacoLauncher
     {
         private const int RuntimeStartupTimeoutMilliseconds = 45000;
         private const int WindowStartupTimeoutMilliseconds = 45000;
+        private const int LoadingWindowSize = 82;
+        private const int HandoffFadeMilliseconds = 180;
+        private static readonly Color[] LoadingGradient =
+        {
+            Color.FromArgb(112, 255, 184),
+            Color.FromArgb(54, 226, 136),
+            Color.FromArgb(22, 145, 82),
+            Color.FromArgb(44, 235, 139),
+            Color.FromArgb(112, 255, 184)
+        };
 
         private readonly string projectRoot;
         private readonly string python;
@@ -52,6 +62,9 @@ internal static class PacoLauncher
         private System.Threading.EventWaitHandle startupReadyEvent;
         private int activationAttempts;
         private float angle;
+        private readonly long ringStartedAtMilliseconds;
+        private int handoffFadeElapsedMilliseconds;
+        private bool handoffStarted;
         private bool errorShown;
 
         internal StartupIndicator(string projectRoot, string python, string entryPoint, string ollamaStartup)
@@ -60,23 +73,38 @@ internal static class PacoLauncher
             this.python = python;
             this.entryPoint = entryPoint;
             this.ollamaStartup = ollamaStartup;
+            ringStartedAtMilliseconds = UnixTimeMilliseconds();
 
-            AutoScaleMode = AutoScaleMode.Dpi;
+            AutoScaleMode = AutoScaleMode.None;
             BackColor = Color.FromArgb(9, 16, 13);
-            ClientSize = new Size(82, 82);
+            ClientSize = new Size(LoadingWindowSize, LoadingWindowSize);
+            DoubleBuffered = true;
             FormBorderStyle = FormBorderStyle.None;
             MaximizeBox = false;
             MinimizeBox = false;
             Opacity = 0.92;
             ShowIcon = false;
             ShowInTaskbar = false;
-            StartPosition = FormStartPosition.CenterScreen;
+            StartPosition = FormStartPosition.Manual;
             TopMost = true;
 
             animationTimer = new Timer { Interval = 16 };
             animationTimer.Tick += delegate
             {
-                angle = (angle + 5.5f) % 360f;
+                angle = (float)(((UnixTimeMilliseconds() - ringStartedAtMilliseconds) * (5.5 / 16.0)) % 360.0);
+                if (handoffStarted)
+                {
+                    handoffFadeElapsedMilliseconds += animationTimer.Interval;
+                    Opacity = 0.92 * Math.Max(
+                        0.0,
+                        1.0 - (handoffFadeElapsedMilliseconds / (double)HandoffFadeMilliseconds)
+                    );
+                    if (handoffFadeElapsedMilliseconds >= HandoffFadeMilliseconds)
+                    {
+                        Close();
+                        return;
+                    }
+                }
                 Invalidate();
             };
 
@@ -87,10 +115,21 @@ internal static class PacoLauncher
             windowActivationTimer.Tick += ActivatePacoWindow;
         }
 
+        protected override void OnLoad(EventArgs eventArgs)
+        {
+            base.OnLoad(eventArgs);
+            Rectangle workingArea = Screen.FromPoint(Cursor.Position).WorkingArea;
+            Location = new Point(
+                workingArea.Left + ((workingArea.Width - ClientRectangle.Width) / 2),
+                workingArea.Top + ((workingArea.Height - ClientRectangle.Height) / 2)
+            );
+        }
+
         protected override void OnShown(EventArgs eventArgs)
         {
             base.OnShown(eventArgs);
-            using (GraphicsPath path = RoundedRectangle(ClientRectangle, 16))
+            Rectangle loadingBounds = LoadingBounds();
+            using (GraphicsPath path = RoundedRectangle(loadingBounds, 16))
             {
                 Region = new Region(path);
             }
@@ -104,17 +143,40 @@ internal static class PacoLauncher
             Graphics graphics = eventArgs.Graphics;
             graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
-            RectangleF ring = new RectangleF(23f, 23f, 36f, 36f);
-            using (Pen track = new Pen(Color.FromArgb(45, 92, 77), 3f))
-            using (Pen active = new Pen(Color.FromArgb(112, 255, 184), 3f))
-            using (SolidBrush center = new SolidBrush(Color.FromArgb(112, 255, 184)))
+            Rectangle loadingBounds = LoadingBounds();
+            RectangleF ring = new RectangleF(loadingBounds.Left + 23f, 23f, 36f, 36f);
+            const int segmentCount = 64;
+            const float segmentSweep = 360f / segmentCount;
+            for (int index = 0; index < segmentCount; index++)
             {
-                active.StartCap = LineCap.Round;
-                active.EndCap = LineCap.Round;
-                graphics.DrawEllipse(track, ring);
-                graphics.DrawArc(active, ring, angle, 94f);
-                graphics.FillEllipse(center, 38f, 38f, 6f, 6f);
+                float position = index / (float)segmentCount;
+                using (Pen segment = new Pen(GradientColor(position), 8f))
+                {
+                    segment.StartCap = LineCap.Flat;
+                    segment.EndCap = LineCap.Flat;
+                    graphics.DrawArc(
+                        segment,
+                        ring,
+                        angle + (index * segmentSweep),
+                        segmentSweep + 1.2f
+                    );
+                }
             }
+        }
+
+        private static Color GradientColor(float position)
+        {
+            float scaled = position * (LoadingGradient.Length - 1);
+            int startIndex = Math.Min((int)scaled, LoadingGradient.Length - 2);
+            float blend = scaled - startIndex;
+            Color start = LoadingGradient[startIndex];
+            Color end = LoadingGradient[startIndex + 1];
+            return Color.FromArgb(
+                start.A + (int)((end.A - start.A) * blend),
+                start.R + (int)((end.R - start.R) * blend),
+                start.G + (int)((end.G - start.G) * blend),
+                start.B + (int)((end.B - start.B) * blend)
+            );
         }
 
         protected override void Dispose(bool disposing)
@@ -217,6 +279,10 @@ internal static class PacoLauncher
                     CreateNoWindow = true
                 };
                 startInfo.EnvironmentVariables["PACO_STARTUP_EVENT"] = startupEventName;
+                startInfo.EnvironmentVariables["PACO_STARTUP_RING_STARTED_MS"] = ringStartedAtMilliseconds.ToString();
+                Rectangle loadingBounds = LoadingBounds();
+                startInfo.EnvironmentVariables["PACO_STARTUP_RING_CENTER_X"] = (Left + loadingBounds.Left + (LoadingWindowSize / 2)).ToString();
+                startInfo.EnvironmentVariables["PACO_STARTUP_RING_CENTER_Y"] = (Top + loadingBounds.Top + (LoadingWindowSize / 2)).ToString();
                 pacoProcess = Process.Start(startInfo);
                 AllowSetForegroundWindow(pacoProcess.Id);
                 activationAttempts = 0;
@@ -241,7 +307,8 @@ internal static class PacoLauncher
             if (startupReadyEvent.WaitOne(0))
             {
                 windowActivationTimer.Stop();
-                Close();
+                handoffStarted = true;
+                handoffFadeElapsedMilliseconds = 0;
                 return;
             }
 
@@ -314,6 +381,21 @@ internal static class PacoLauncher
             path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
             path.CloseFigure();
             return path;
+        }
+
+        private Rectangle LoadingBounds()
+        {
+            return new Rectangle(
+                Math.Max(0, (ClientRectangle.Width - LoadingWindowSize) / 2),
+                Math.Max(0, (ClientRectangle.Height - LoadingWindowSize) / 2),
+                LoadingWindowSize,
+                LoadingWindowSize
+            );
+        }
+
+        private static long UnixTimeMilliseconds()
+        {
+            return (long)(DateTime.UtcNow - new DateTime(1970, 1, 1)).TotalMilliseconds;
         }
 
         [DllImport("user32.dll")]

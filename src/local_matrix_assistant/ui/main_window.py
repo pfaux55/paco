@@ -33,6 +33,7 @@ from local_matrix_assistant.ui.main_window_voice import VoiceWindowMixin
 from local_matrix_assistant.ui.settings_panel import SettingsPanel
 from local_matrix_assistant.ui.shortcut_help import ShortcutHelpDialog
 from local_matrix_assistant.ui.startup_sequence import StartupSequence
+from local_matrix_assistant.ui.startup_ring import launcher_ring_center
 from local_matrix_assistant.ui.system_notice import SystemNoticeBar
 from local_matrix_assistant.ui.task_runner import TaskRunner
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
@@ -516,12 +517,26 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
             restored = restored and self._window_intersects_available_screen()
         if restored:
             state = self.windowState()
-            if state & Qt.WindowState.WindowMinimized:
-                self.setWindowState(state & ~Qt.WindowState.WindowMinimized)
+            self.setWindowState(
+                state
+                & ~Qt.WindowState.WindowMinimized
+                & ~Qt.WindowState.WindowMaximized
+            )
             self._apply_responsive_layout(self.width())
+            self._center_on_available_screen()
             return
         self.resize(1420, 900)
-        self.showMaximized()
+        self._center_on_available_screen()
+
+    def _center_on_available_screen(self) -> None:
+        startup_center = launcher_ring_center()
+        screen = QApplication.screenAt(startup_center) if startup_center is not None else None
+        screen = screen or self.screen() or QApplication.primaryScreen()
+        if screen is None:
+            return
+        frame = self.frameGeometry()
+        frame.moveCenter(screen.availableGeometry().center())
+        self.move(frame.topLeft())
 
     def _window_intersects_available_screen(self) -> bool:
         geometry = self.frameGeometry()

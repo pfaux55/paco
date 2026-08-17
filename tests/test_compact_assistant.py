@@ -26,9 +26,11 @@ from local_matrix_assistant.core.models import ChatStreamResult
 from local_matrix_assistant.services.ollama import OllamaClient, OllamaStatus
 from local_matrix_assistant.ui.compact_assistant import (
     COMPACT_SCREEN_MARGIN,
+    SCREEN_CAPTURE_DELAY_MS,
     CompactAssistantWindow,
     compact_geometry_for,
 )
+from local_matrix_assistant.ui.theme import stylesheet_for_theme
 
 
 def build_config(*, model: str = "") -> AppConfig:
@@ -117,6 +119,7 @@ class CompactAssistantTests(unittest.TestCase):
         self.assertTrue(window.windowFlags() & Qt.WindowType.FramelessWindowHint)
         self.assertEqual("compactInputBar", window.input_bar.objectName())
         self.assertTrue(window.transcript_scroll.isHidden())
+        self.assertFalse(hasattr(window, "send_stop_button"))
         self.assertLessEqual(window.height(), 64)
         window.close()
 
@@ -137,9 +140,9 @@ class CompactAssistantTests(unittest.TestCase):
 
     def test_target_geometry_is_bottom_right_and_bounded_across_work_areas(self) -> None:
         cases = (
-            (QRect(100, 50, 1920, 1040), (346, 187)),
-            (QRect(-800, 20, 800, 600), (320, 180)),
-            (QRect(0, 0, 3840, 2160), (560, 389)),
+            (QRect(100, 50, 1920, 1040), (346, 416)),
+            (QRect(-800, 20, 800, 600), (320, 300)),
+            (QRect(0, 0, 3840, 2160), (560, 520)),
         )
         for available, expected_size in cases:
             with self.subTest(available=available):
@@ -147,6 +150,13 @@ class CompactAssistantTests(unittest.TestCase):
                 self.assertEqual(expected_size, (geometry.width(), geometry.height()))
                 self.assertEqual(COMPACT_SCREEN_MARGIN, available.right() - geometry.right())
                 self.assertEqual(COMPACT_SCREEN_MARGIN, available.bottom() - geometry.bottom())
+
+    def test_compact_transcript_uses_a_slim_rounded_scrollbar(self) -> None:
+        stylesheet = stylesheet_for_theme("matrix")
+
+        self.assertIn("QScrollArea#compactTranscript QScrollBar:vertical", stylesheet)
+        self.assertIn("border-radius: 4px", stylesheet)
+        self.assertIn("width: 8px", stylesheet)
 
     def test_capture_uses_cursor_screen_hides_overlay_and_is_consumed_once(self) -> None:
         client = RecordingOllama()
@@ -174,6 +184,28 @@ class CompactAssistantTests(unittest.TestCase):
         self.wait_until_idle(window)
         self.assertIn("images", client.payloads[0]["messages"][-1])
         self.assertFalse(any(message.metadata.get("attachments") for message in window.messages))
+        window.close()
+
+    def test_capture_button_waits_for_desktop_repaint_before_grabbing_screen(self) -> None:
+        window = self.build_window()
+        window.show()
+        self.app.processEvents()
+        screen = FakeScreen(window, QRect(0, 0, 1280, 720))
+
+        with patch(
+            "local_matrix_assistant.ui.compact_assistant.screen_under_cursor",
+            return_value=screen,
+        ):
+            window.capture_button.click()
+            self.assertTrue(window._capture_in_progress)
+            self.assertFalse(window.isVisible())
+            self.assertIsNone(window.pending_screenshot)
+            QTest.qWait(SCREEN_CAPTURE_DELAY_MS + 50)
+
+        self.assertFalse(window._capture_in_progress)
+        self.assertTrue(screen.hidden_during_capture)
+        self.assertTrue(window.isVisible())
+        self.assertIsNotNone(window.pending_screenshot)
         window.close()
 
     def test_text_uses_standard_routing_and_missing_vision_model_shows_guidance(self) -> None:

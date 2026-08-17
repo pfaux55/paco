@@ -46,7 +46,6 @@ def _signal_launcher_ready() -> None:
 
 def _present_window(window: MainWindow) -> None:
     apply_windows_window_icon(window)
-    _signal_launcher_ready()
     QTimer.singleShot(120, lambda: bring_windows_window_to_front(window))
 
 
@@ -94,6 +93,7 @@ def main() -> int:
         window.hide()
 
     window.compact_mode_requested.connect(show_compact_mode)
+    window.startup_sequence.first_frame_ready.connect(_signal_launcher_ready)
     window.setWindowIcon(app.windowIcon())
     window.show()
     if window.windowState() & Qt.WindowState.WindowMinimized:

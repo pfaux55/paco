@@ -30,13 +30,15 @@ from local_matrix_assistant.ui.theme import stylesheet_for_theme
 from local_matrix_assistant.ui.workers import FunctionWorker, StreamWorker
 
 
-COMPACT_TARGET_RATIO = 0.18
+COMPACT_WIDTH_RATIO = 0.18
+COMPACT_HEIGHT_RATIO = 0.40
 COMPACT_MIN_WIDTH = 320
-COMPACT_MIN_HEIGHT = 180
+COMPACT_MIN_HEIGHT = 300
 COMPACT_MAX_WIDTH = 560
-COMPACT_MAX_HEIGHT = 420
+COMPACT_MAX_HEIGHT = 520
 COMPACT_SCREEN_MARGIN = 16
 COMPACT_COLLAPSED_HEIGHT = 64
+SCREEN_CAPTURE_DELAY_MS = 150
 MAX_SESSION_MESSAGES = 40
 
 
@@ -47,11 +49,11 @@ def compact_geometry_for(available: QRect) -> QRect:
     available_height = max(1, available.height())
     width = min(
         COMPACT_MAX_WIDTH,
-        max(COMPACT_MIN_WIDTH, round(available_width * COMPACT_TARGET_RATIO)),
+        max(COMPACT_MIN_WIDTH, round(available_width * COMPACT_WIDTH_RATIO)),
     )
     height = min(
         COMPACT_MAX_HEIGHT,
-        max(COMPACT_MIN_HEIGHT, round(available_height * COMPACT_TARGET_RATIO)),
+        max(COMPACT_MIN_HEIGHT, round(available_height * COMPACT_HEIGHT_RATIO)),
     )
     width = min(width, max(1, available_width - (2 * COMPACT_SCREEN_MARGIN)))
     height = min(height, max(1, available_height - (2 * COMPACT_SCREEN_MARGIN)))
@@ -104,6 +106,7 @@ class CompactAssistantWindow(QWidget):
         self._pending_reply_label: QLabel | None = None
         self._pending_reply_text = ""
         self._busy = False
+        self._capture_in_progress = False
         self._closing = False
         self._expanded = False
         self._anchor_screen = None
@@ -205,7 +208,7 @@ class CompactAssistantWindow(QWidget):
             self.style().standardIcon(QStyle.StandardPixmap.SP_ComputerIcon)
         )
         self.capture_button.setIconSize(QSize(15, 15))
-        self.capture_button.clicked.connect(self.capture_screen)
+        self.capture_button.clicked.connect(self.request_screen_capture)
 
         self.prompt_input = QLineEdit()
         self.prompt_input.setObjectName("compactPromptInput")
@@ -216,18 +219,6 @@ class CompactAssistantWindow(QWidget):
         controls.addWidget(self.prompt_input, 1)
 
         controls.addWidget(self.capture_button)
-
-        self.send_stop_button = QPushButton()
-        self.send_stop_button.setObjectName("compactSendButton")
-        self.send_stop_button.setAccessibleName("Send question")
-        self.send_stop_button.setToolTip("Send")
-        self.send_stop_button.setFixedSize(32, 32)
-        self.send_stop_button.setIcon(
-            self.style().standardIcon(QStyle.StandardPixmap.SP_ArrowUp)
-        )
-        self.send_stop_button.setIconSize(QSize(15, 15))
-        self.send_stop_button.clicked.connect(self._send_or_stop)
-        controls.addWidget(self.send_stop_button)
 
         self.main_mode_button = QPushButton()
         self.main_mode_button.setObjectName("compactMainButton")
@@ -360,7 +351,7 @@ class CompactAssistantWindow(QWidget):
         self._set_state("error", f"Could not check Ollama: {message}")
 
     def capture_screen(self, screen=None) -> LocalAttachment | None:
-        if self._busy:
+        if self._busy or self._capture_in_progress:
             self._set_state("loading", "Wait for the current reply before capturing.")
             return None
         target_screen = screen or screen_under_cursor()
@@ -372,16 +363,7 @@ class CompactAssistantWindow(QWidget):
         self.hide()
         QApplication.processEvents()
         try:
-            pixmap = target_screen.grabWindow(0)
-            image = pixmap.toImage() if hasattr(pixmap, "toImage") else QImage()
-            if image.isNull():
-                raise ValueError("The display capture was empty.")
-            attachment = self.attachment_service.load_clipboard_image(image)
-            attachment = replace(
-                attachment,
-                path="memory://screen-capture",
-                name="screen-capture.jpg",
-            )
+            attachment = self._capture_screen_image(target_screen)
         except Exception as exc:  # noqa: BLE001
             self._set_state("error", f"Screen capture failed: {exc}")
             return None
@@ -390,6 +372,67 @@ class CompactAssistantWindow(QWidget):
                 self.show()
                 self.raise_()
 
+        self._accept_screen_capture(attachment)
+        return attachment
+
+    def request_screen_capture(self) -> bool:
+        """Hide the overlay, then capture after Windows has repainted the desktop."""
+
+        if self._busy or self._capture_in_progress:
+            return False
+        target_screen = screen_under_cursor()
+        if target_screen is None:
+            self._set_state("error", "No display is available for capture.")
+            return False
+
+        self._capture_in_progress = True
+        self.capture_button.setEnabled(False)
+        was_visible = self.isVisible()
+        self.hide()
+        QApplication.processEvents()
+        QTimer.singleShot(
+            SCREEN_CAPTURE_DELAY_MS,
+            lambda: self._complete_screen_capture(target_screen, was_visible),
+        )
+        return True
+
+    def _complete_screen_capture(self, target_screen, restore_window: bool) -> None:
+        if self._closing:
+            self._capture_in_progress = False
+            return
+        attachment: LocalAttachment | None = None
+        error = ""
+        try:
+            if not self._closing:
+                attachment = self._capture_screen_image(target_screen)
+        except Exception as exc:  # noqa: BLE001
+            error = str(exc)
+        finally:
+            self._capture_in_progress = False
+            self.capture_button.setEnabled(not self._busy)
+            if restore_window and not self._closing:
+                self.show()
+                self.raise_()
+                self.activateWindow()
+
+        if error:
+            self._set_state("error", f"Screen capture failed: {error}")
+        elif attachment is not None:
+            self._accept_screen_capture(attachment)
+
+    def _capture_screen_image(self, target_screen) -> LocalAttachment:
+        pixmap = target_screen.grabWindow(0)
+        image = pixmap.toImage() if hasattr(pixmap, "toImage") else QImage()
+        if image.isNull():
+            raise ValueError("The display capture was empty.")
+        attachment = self.attachment_service.load_clipboard_image(image)
+        return replace(
+            attachment,
+            path="memory://screen-capture",
+            name="screen-capture.jpg",
+        )
+
+    def _accept_screen_capture(self, attachment: LocalAttachment) -> None:
         self._pending_screenshot = attachment
         self.capture_note.setText(
             f"Screen ready • {attachment.width} × {attachment.height} • used once"
@@ -397,13 +440,6 @@ class CompactAssistantWindow(QWidget):
         self.capture_note.show()
         self._set_state("ready", "Screen captured. Ask a question to use it once.")
         self.prompt_input.setFocus()
-        return attachment
-
-    def _send_or_stop(self) -> None:
-        if self._busy:
-            self.cancel_reply()
-        else:
-            self.submit_prompt()
 
     def select_model(self, prompt: str, *, requires_vision: bool) -> ModelSelection:
         return self.model_router.select(
@@ -572,7 +608,6 @@ class CompactAssistantWindow(QWidget):
         if not self._busy or self._active_stream_worker is None:
             return False
         self._active_stream_worker.cancel()
-        self.send_stop_button.setEnabled(False)
         self._set_state("loading", "Canceling reply…")
         return True
 
@@ -589,17 +624,8 @@ class CompactAssistantWindow(QWidget):
 
     def _set_busy(self, busy: bool) -> None:
         self._busy = busy
-        self.capture_button.setEnabled(not busy)
+        self.capture_button.setEnabled(not busy and not self._capture_in_progress)
         self.prompt_input.setEnabled(not busy)
-        self.send_stop_button.setEnabled(True)
-        send_icon = (
-            QStyle.StandardPixmap.SP_MediaStop
-            if busy
-            else QStyle.StandardPixmap.SP_ArrowUp
-        )
-        self.send_stop_button.setIcon(self.style().standardIcon(send_icon))
-        self.send_stop_button.setToolTip("Stop" if busy else "Send")
-        self.send_stop_button.setAccessibleName("Stop reply" if busy else "Send question")
 
     def _set_state(self, state: str, message: str) -> None:
         self.status_indicator.setProperty("assistantState", state)

@@ -597,22 +597,23 @@ class MainWindowIntegrationTests(unittest.TestCase):
             self.assertTrue(first._compact_layout)
             first.close()
 
-    def test_restored_geometry_outside_available_screens_falls_back_to_maximized(self) -> None:
+    def test_restored_geometry_outside_available_screens_falls_back_to_centered(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = build_paths(Path(tmp))
             config = AppConfig.defaults(paths)
             config.window_geometry = "c2F2ZWQtZ2VvbWV0cnk="
-            maximize_calls: list[bool] = []
-
             with (
                 patch.object(MainWindow, "refresh_status", lambda _self: None),
-                patch.object(MainWindow, "showMaximized", lambda _self: maximize_calls.append(True)),
                 patch.object(AudioRecorder, "list_inputs", lambda _self: []),
                 patch.object(AudioPlayer, "list_outputs", lambda _self: []),
             ):
                 window = MainWindow(paths, config)
 
-            self.assertEqual([True], maximize_calls)
+            available_center = window.screen().availableGeometry().center()
+            window_center = window.frameGeometry().center()
+            self.assertLessEqual(abs(window_center.x() - available_center.x()), 1)
+            self.assertLessEqual(abs(window_center.y() - available_center.y()), 1)
+            self.assertFalse(window.windowState() & Qt.WindowState.WindowMaximized)
             window.close()
 
     def test_last_opened_chat_and_per_conversation_text_drafts_restore(self) -> None:

@@ -17,7 +17,9 @@ if errorlevel 1 (
   "%PYTHON_EXE%" -m pip install -r requirements.txt || exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\ensure_ollama.ps1"
-if errorlevel 1 exit /b 1
+if exist "data\PacoLauncher.exe" (
+  "data\PacoLauncher.exe"
+  exit /b %ERRORLEVEL%
+)
 
 "%PYTHON_EXE%" run_assistant.py

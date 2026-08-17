@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QObject, QTimer, Signal
 from PySide6.QtWidgets import QWidget
 
 from local_matrix_assistant.ui.startup_overlay import StartupOverlay
 
 
-class StartupSequence:
+class StartupSequence(QObject):
+    first_frame_ready = Signal()
     startup_timeout_ms = 5000
 
     def __init__(
@@ -15,6 +16,7 @@ class StartupSequence:
         app_name: str,
         root: QWidget,
     ) -> None:
+        super().__init__(root)
         self._root = root
         self._started = False
 
@@ -24,6 +26,7 @@ class StartupSequence:
         self._startup_timeout.timeout.connect(self._recover_from_timeout)
 
         self.overlay = StartupOverlay(app_name, root)
+        self.overlay.first_frame_ready.connect(self.first_frame_ready)
         self.overlay.finished.connect(self._finish)
         self.sync_geometry()
 
