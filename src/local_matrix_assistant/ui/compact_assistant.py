@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 from typing import Iterable
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QSize, QThreadPool, QTimer, Qt
+from PySide6.QtCore import QEvent, QPoint, QRect, QSize, QThreadPool, QTimer, Qt, Signal
 from PySide6.QtGui import QCloseEvent, QCursor, QGuiApplication, QImage
 from PySide6.QtWidgets import (
     QApplication,
@@ -76,6 +76,9 @@ def screen_under_cursor():
 
 class CompactAssistantWindow(QWidget):
     """Session-only Paco overlay for text and one-shot screen questions."""
+
+    closing = Signal()
+    main_mode_requested = Signal()
 
     def __init__(
         self,
@@ -225,6 +228,18 @@ class CompactAssistantWindow(QWidget):
         self.send_stop_button.setIconSize(QSize(15, 15))
         self.send_stop_button.clicked.connect(self._send_or_stop)
         controls.addWidget(self.send_stop_button)
+
+        self.main_mode_button = QPushButton()
+        self.main_mode_button.setObjectName("compactMainButton")
+        self.main_mode_button.setAccessibleName("Open main app")
+        self.main_mode_button.setToolTip("Main app")
+        self.main_mode_button.setFixedSize(24, 30)
+        self.main_mode_button.setIcon(
+            self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarNormalButton)
+        )
+        self.main_mode_button.setIconSize(QSize(12, 12))
+        self.main_mode_button.clicked.connect(self.main_mode_requested.emit)
+        controls.addWidget(self.main_mode_button)
 
         self.close_button = QPushButton()
         self.close_button.setObjectName("compactCloseButton")
@@ -633,7 +648,10 @@ class CompactAssistantWindow(QWidget):
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        was_closing = self._closing
         self._closing = True
+        if not was_closing:
+            self.closing.emit()
         self.task_runner.close()
         if self._active_stream_worker is not None:
             self._active_stream_worker.cancel()

@@ -173,7 +173,18 @@ def _coerce_model_profile(data: dict) -> None:
 
 def _coerce_ui_preferences(data: dict) -> None:
     theme = data.get("theme", "matrix")
-    data["theme"] = theme if theme in {"matrix", "ocean", "violet", "amber", "red"} else "matrix"
+    data["theme"] = theme if theme in {
+        "matrix",
+        "ocean",
+        "violet",
+        "cyan",
+        "teal",
+        "pink",
+        "orange",
+        "lime",
+        "amber",
+        "red",
+    } else "matrix"
     data["sidebar_collapsed"] = data.get("sidebar_collapsed") is True
     data["continuous_voice_enabled"] = data.get("continuous_voice_enabled") is True
     active_page = data.get("active_page")

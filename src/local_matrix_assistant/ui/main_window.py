@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QByteArray, QThreadPool, QTimer, Qt
+from PySide6.QtCore import QByteArray, QThreadPool, QTimer, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
 
@@ -42,6 +42,7 @@ from local_matrix_assistant.ui.workers import StreamWorker
 
 
 class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsStatusWindowMixin, QMainWindow):
+    compact_mode_requested = Signal()
     compact_layout_width = 1060
 
     def __init__(self, paths: AppPaths, config: AppConfig) -> None:
@@ -296,6 +297,12 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.header_title.setObjectName("title")
         header_layout.addWidget(self.header_title)
         header_layout.addStretch(1)
+
+        self.compact_mode_button = QPushButton("Compact Mode")
+        self.compact_mode_button.setObjectName("headerActionButton")
+        self.compact_mode_button.setAccessibleName("Switch to compact mode")
+        self.compact_mode_button.setToolTip("Switch to the compact assistant")
+        header_layout.addWidget(self.compact_mode_button)
 
         self.shortcuts_button = QPushButton("Shortcuts")
         self.shortcuts_button.setObjectName("headerActionButton")
@@ -644,6 +651,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.agent_nav_button.clicked.connect(lambda: self._show_page(1, self.agent_nav_button))
         self.voice_nav_button.clicked.connect(lambda: self._show_page(2, self.voice_nav_button))
         self.settings_nav_button.clicked.connect(lambda: self._show_page(3, self.settings_nav_button))
+        self.compact_mode_button.clicked.connect(self.compact_mode_requested.emit)
         self.shortcuts_button.clicked.connect(self._show_shortcut_help)
         self.sidebar_toggle_button.clicked.connect(self._toggle_sidebar)
         self.system_notice.action_requested.connect(self._on_system_notice_action)

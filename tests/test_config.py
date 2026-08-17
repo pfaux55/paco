@@ -237,6 +237,11 @@ class ConfigTests(unittest.TestCase):
             config.save(paths)
             self.assertEqual("red", AppConfig.load(paths).theme)
 
+            for theme in ("cyan", "teal", "pink", "orange", "lime"):
+                config.theme = theme
+                config.save(paths)
+                self.assertEqual(theme, AppConfig.load(paths).theme)
+
             paths.settings_file.write_text('{"theme": "unknown"}', encoding="utf-8")
             self.assertEqual("matrix", AppConfig.load(paths).theme)
 

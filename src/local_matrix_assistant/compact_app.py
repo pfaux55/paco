@@ -14,6 +14,7 @@ from local_matrix_assistant.ui.brand import (
     paco_icon,
 )
 from local_matrix_assistant.ui.compact_assistant import CompactAssistantWindow
+from local_matrix_assistant.ui.main_window import MainWindow
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
 
 
@@ -29,6 +30,47 @@ def main() -> int:
     app.setFont(QFont("Consolas", 10))
 
     window = CompactAssistantWindow(config)
+    compact_window: CompactAssistantWindow | None = window
+    main_window: MainWindow | None = None
+
+    def clear_compact_window(*_args) -> None:
+        nonlocal compact_window
+        compact_window = None
+
+    def close_hidden_main_window() -> None:
+        if main_window is not None and not main_window.isVisible():
+            main_window.close()
+
+    def show_main_mode() -> None:
+        nonlocal main_window
+        if main_window is None:
+            main_window = MainWindow(paths, config)
+            main_window.setWindowIcon(app.windowIcon())
+            main_window.compact_mode_requested.connect(show_compact_mode)
+        main_window.show()
+        main_window.raise_()
+        main_window.activateWindow()
+        if compact_window is not None:
+            compact_window.close()
+
+    def show_compact_mode() -> None:
+        nonlocal compact_window
+        if compact_window is None:
+            current_config = main_window.config if main_window is not None else config
+            compact_window = CompactAssistantWindow(current_config)
+            compact_window.setWindowIcon(app.windowIcon())
+            compact_window.main_mode_requested.connect(show_main_mode)
+            compact_window.closing.connect(close_hidden_main_window)
+            compact_window.destroyed.connect(clear_compact_window)
+        compact_window.show()
+        compact_window.raise_()
+        apply_windows_window_icon(compact_window)
+        if main_window is not None:
+            main_window.hide()
+
+    window.main_mode_requested.connect(show_main_mode)
+    window.closing.connect(close_hidden_main_window)
+    window.destroyed.connect(clear_compact_window)
     window.setWindowIcon(app.windowIcon())
     window.show()
     window.raise_()

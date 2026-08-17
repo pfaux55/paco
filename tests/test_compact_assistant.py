@@ -120,6 +120,21 @@ class CompactAssistantTests(unittest.TestCase):
         self.assertLessEqual(window.height(), 64)
         window.close()
 
+    def test_small_main_app_button_requests_full_mode(self) -> None:
+        window = self.build_window()
+        requests: list[bool] = []
+        window.main_mode_requested.connect(lambda: requests.append(True))
+
+        window.main_mode_button.click()
+
+        self.assertEqual([True], requests)
+        self.assertEqual(
+            (24, 30),
+            (window.main_mode_button.width(), window.main_mode_button.height()),
+        )
+        self.assertEqual("Main app", window.main_mode_button.toolTip())
+        window.close()
+
     def test_target_geometry_is_bottom_right_and_bounded_across_work_areas(self) -> None:
         cases = (
             (QRect(100, 50, 1920, 1040), (346, 187)),

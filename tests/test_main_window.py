@@ -28,7 +28,7 @@ from local_matrix_assistant.services.model_router import ModelRouter, ModelSelec
 from local_matrix_assistant.ui.chat_panel import ChatPanel
 from local_matrix_assistant.ui.main_window import MainWindow
 from local_matrix_assistant.ui.settings_panel import SettingsPanel
-from local_matrix_assistant.ui.theme import stylesheet_for_theme
+from local_matrix_assistant.ui.theme import THEME_OPTIONS, stylesheet_for_theme
 from local_matrix_assistant.ui.voice_panel import VoicePanel
 
 
@@ -73,6 +73,21 @@ class MainWindowStateTests(unittest.TestCase):
 
         window.chat_panel.close()
         window.voice_panel.close()
+
+    def test_header_compact_mode_button_requests_compact_window(self) -> None:
+        window = MainWindow.__new__(MainWindow)
+        QMainWindow.__init__(window)
+        header = window._build_header()
+        requests: list[bool] = []
+        window.compact_mode_requested.connect(lambda: requests.append(True))
+        window.compact_mode_button.clicked.connect(window.compact_mode_requested.emit)
+
+        window.compact_mode_button.click()
+
+        self.assertEqual([True], requests)
+        self.assertEqual("Compact Mode", window.compact_mode_button.text())
+        header.close()
+        window.deleteLater()
 
     def test_sync_available_models_clears_stale_entries_when_none_are_available(self) -> None:
         config = build_config(ollama_model="gemma3:1b")
@@ -226,12 +241,15 @@ class MainWindowStateTests(unittest.TestCase):
 
         self.assertIs(first, second)
 
-    def test_theme_selector_shows_previews_and_includes_red(self) -> None:
+    def test_theme_selector_shows_previews_for_all_ten_themes(self) -> None:
         panel = SettingsPanel(build_config())
-        red_index = panel.theme_combo.findData("red")
+        theme_ids = [theme_id for theme_id, _name in THEME_OPTIONS]
 
-        self.assertGreaterEqual(red_index, 0)
-        self.assertFalse(panel.theme_combo.itemIcon(red_index).isNull())
+        self.assertEqual(10, panel.theme_combo.count())
+        self.assertEqual(
+            theme_ids,
+            [panel.theme_combo.itemData(index) for index in range(panel.theme_combo.count())],
+        )
         self.assertTrue(
             all(
                 not panel.theme_combo.itemIcon(index).isNull()
@@ -239,6 +257,15 @@ class MainWindowStateTests(unittest.TestCase):
             )
         )
         panel.close()
+
+    def test_new_theme_stylesheets_are_distinct(self) -> None:
+        stylesheets = {
+            stylesheet_for_theme(theme)
+            for theme in ("cyan", "teal", "pink", "orange", "lime")
+        }
+
+        self.assertEqual(5, len(stylesheets))
+        self.assertNotIn(stylesheet_for_theme("matrix"), stylesheets)
 
     def test_auto_routing_updates_composer_and_coding_system_prompt(self) -> None:
         config = build_config(ollama_model="llama3.2:3b")

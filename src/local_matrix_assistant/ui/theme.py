@@ -9,6 +9,11 @@ THEME_OPTIONS: tuple[tuple[str, str], ...] = (
     ("matrix", "Matrix Green"),
     ("ocean", "Ocean Blue"),
     ("violet", "Violet"),
+    ("cyan", "Electric Cyan"),
+    ("teal", "Teal"),
+    ("pink", "Neon Pink"),
+    ("orange", "Sunset Orange"),
+    ("lime", "Acid Lime"),
     ("amber", "Amber"),
     ("red", "Crimson Red"),
 )
@@ -16,6 +21,11 @@ THEME_PREVIEWS = {
     "matrix": ("#07140d", "#24e081"),
     "ocean": ("#070d14", "#247ee0"),
     "violet": ("#100714", "#8a4de0"),
+    "cyan": ("#071214", "#24c8e0"),
+    "teal": ("#071412", "#24e0c1"),
+    "pink": ("#14070f", "#e0249a"),
+    "orange": ("#140b07", "#e06f24"),
+    "lime": ("#101407", "#8fe024"),
     "amber": ("#141007", "#e0a224"),
     "red": ("#140707", "#e04444"),
 }
@@ -24,6 +34,11 @@ _THEME_HUES = {
     "matrix": 0.39,
     "ocean": 0.58,
     "violet": 0.76,
+    "cyan": 0.52,
+    "teal": 0.47,
+    "pink": 0.91,
+    "orange": 0.06,
+    "lime": 0.23,
     "amber": 0.10,
     "red": 0.0,
 }
@@ -101,6 +116,7 @@ QLabel#compactCaptureNote {
     padding: 6px 9px;
 }
 QPushButton#compactCaptureButton,
+QPushButton#compactMainButton,
 QPushButton#compactCloseButton {
     background: transparent;
     border: none;
@@ -112,6 +128,7 @@ QPushButton#compactCaptureButton {
     font-size: 14px;
 }
 QPushButton#compactCaptureButton:hover,
+QPushButton#compactMainButton:hover,
 QPushButton#compactCloseButton:hover {
     background: #102b1c;
     color: #e4eee7;

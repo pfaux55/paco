@@ -15,6 +15,7 @@ from local_matrix_assistant.ui.brand import (
     configure_windows_app_identity,
     paco_icon,
 )
+from local_matrix_assistant.ui.compact_assistant import CompactAssistantWindow
 from local_matrix_assistant.ui.main_window import MainWindow
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
 
@@ -61,6 +62,38 @@ def main() -> int:
     app.setFont(QFont("Consolas", 10))
 
     window = MainWindow(paths, config)
+    compact_window: CompactAssistantWindow | None = None
+
+    def clear_compact_window(*_args) -> None:
+        nonlocal compact_window
+        compact_window = None
+
+    def close_hidden_main_window() -> None:
+        if not window.isVisible():
+            window.close()
+
+    def show_main_mode() -> None:
+        window.show()
+        window.raise_()
+        window.activateWindow()
+        if compact_window is not None:
+            compact_window.close()
+
+    def show_compact_mode() -> None:
+        nonlocal compact_window
+        if compact_window is None:
+            compact_window = CompactAssistantWindow(window.config)
+            compact_window.setWindowIcon(app.windowIcon())
+            compact_window.main_mode_requested.connect(show_main_mode)
+            compact_window.closing.connect(close_hidden_main_window)
+            compact_window.destroyed.connect(clear_compact_window)
+        compact_window.show()
+        compact_window.raise_()
+        compact_window.activateWindow()
+        apply_windows_window_icon(compact_window)
+        window.hide()
+
+    window.compact_mode_requested.connect(show_compact_mode)
     window.setWindowIcon(app.windowIcon())
     window.show()
     if window.windowState() & Qt.WindowState.WindowMinimized:
