@@ -4,6 +4,13 @@ import colorsys
 from functools import lru_cache
 import re
 
+from local_matrix_assistant.core.config import (
+    DEFAULT_CHAT_FONT_FAMILY,
+    DEFAULT_CHAT_FONT_SIZE,
+    normalize_chat_font_family,
+    normalize_chat_font_size,
+)
+
 
 THEME_OPTIONS: tuple[tuple[str, str], ...] = (
     ("matrix", "Matrix Green"),
@@ -385,9 +392,104 @@ QFrame#voiceOnlyPanel {
     border-radius: 26px;
 }
 QFrame#modelInstallCard {
-    background: #0a1710;
-    border: 1px solid #214431;
-    border-radius: 15px;
+    background: #07130d;
+    border: 1px solid #24513a;
+    border-radius: 16px;
+}
+QScrollArea#settingsScroll,
+QWidget#settingsSurface,
+QWidget#settingsField,
+QWidget#settingsControlGroup {
+    background: transparent;
+}
+QFrame#settingsCard {
+    background: #09150f;
+    border: 1px solid #1b392a;
+    border-radius: 19px;
+}
+QFrame#settingsCard:hover {
+    border-color: #28583e;
+}
+QLabel#settingsSectionTitle {
+    color: #edf5ef;
+    font-size: 15px;
+    font-weight: 800;
+}
+QLabel#settingsSectionDescription,
+QLabel#settingsFieldHelp {
+    color: #839d8b;
+    font-size: 10px;
+}
+QLabel#settingsFieldLabel {
+    color: #cfe0d4;
+    font-size: 11px;
+    font-weight: 700;
+}
+QComboBox#settingsControl,
+QLineEdit#settingsControl {
+    background: #07120c;
+    border: 1px solid #224431;
+    border-radius: 11px;
+    color: #edf5ef;
+    min-height: 24px;
+    padding: 8px 11px;
+}
+QComboBox#settingsControl:hover,
+QLineEdit#settingsControl:hover {
+    background: #0a1911;
+    border-color: #326348;
+}
+QComboBox#settingsControl:focus,
+QLineEdit#settingsControl:focus {
+    border-color: #31b96d;
+}
+QLabel#settingsInsetTitle {
+    color: #dcebe1;
+    font-size: 12px;
+    font-weight: 800;
+}
+QLabel#settingsLocalBadge {
+    background: #10301e;
+    border: 1px solid #286644;
+    border-radius: 8px;
+    color: #68d993;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 3px 7px;
+}
+QLabel#settingsModelDetails {
+    background: #0b1d13;
+    border: 1px solid #1e432f;
+    border-radius: 10px;
+    color: #b8d1bf;
+    padding: 9px 11px;
+}
+QLabel#settingsInstallStatus {
+    color: #91ad99;
+    font-size: 10px;
+}
+QPushButton#modelInstallButton {
+    background: #176d40;
+    border-color: #28c975;
+    color: #f4fff7;
+    min-width: 88px;
+}
+QPushButton#modelInstallButton:hover {
+    background: #1b8050;
+    border-color: #3bea91;
+}
+QFrame#settingsActionBar {
+    background: #08130d;
+    border: 1px solid #1d3d2c;
+    border-radius: 17px;
+}
+QWidget#settingsStatus,
+QWidget#settingsStatus QLabel#statusStrip {
+    background: transparent;
+}
+QWidget#settingsStatus QLabel#statusStrip {
+    color: #9eb8a7;
+    padding: 0 4px;
 }
 QProgressBar#modelInstallProgress {
     min-height: 6px;
@@ -415,6 +517,10 @@ QFrame#composerDock {
     background: #09150f;
     border: 1px solid #1b382a;
     border-radius: 22px;
+}
+QFrame#composerDock[dragActive="true"] {
+    background: #0d2418;
+    border: 2px solid #2bce78;
 }
 QLabel#agentScopeLabel {
     color: #6f927b;
@@ -535,7 +641,7 @@ QPushButton#attachmentRemoveButton:hover {
     border-color: #326348;
     color: #f0f7f2;
 }
-QPlainTextEdit#chatInput[dragActive="true"] {
+QPlainTextEdit[dragActive="true"] {
     background: #0d2418;
     border: 2px solid #2bce78;
 }
@@ -1364,6 +1470,35 @@ def _stylesheet_for_normalized_theme(theme: str) -> str:
     return re.sub(r"#([0-9a-fA-F]{6})", recolor, MATRIX_STYLESHEET)
 
 
-def stylesheet_for_theme(theme: str) -> str:
-    """Return a cached application stylesheet for a selected colour theme."""
-    return _stylesheet_for_normalized_theme(normalize_theme(theme))
+@lru_cache(maxsize=256)
+def _stylesheet_for_preferences(theme: str, font_family: str, font_size: int) -> str:
+    base = _stylesheet_for_normalized_theme(theme)
+    font_rules = f"""
+
+/* User-selected chat and text-entry typography. */
+QLabel#messageBody,
+QPlainTextEdit#chatInput,
+QLineEdit,
+QPlainTextEdit,
+QTextEdit,
+QWidget#compactAssistant QLabel,
+QWidget#compactAssistant QLineEdit,
+QWidget#compactAssistant QPushButton {{
+    font-family: \"{font_family}\";
+    font-size: {font_size}pt;
+}}
+"""
+    return base + font_rules
+
+
+def stylesheet_for_theme(
+    theme: str,
+    font_family: str = DEFAULT_CHAT_FONT_FAMILY,
+    font_size: int = DEFAULT_CHAT_FONT_SIZE,
+) -> str:
+    """Return a cached stylesheet for the selected colour and chat typography."""
+    return _stylesheet_for_preferences(
+        normalize_theme(theme),
+        normalize_chat_font_family(font_family),
+        normalize_chat_font_size(font_size),
+    )

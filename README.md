@@ -61,7 +61,7 @@ Run the automated test suite before making changes:
 - `Piper` for offline text-to-speech
 - `miniaudio` plus Windows default playback fallback for local microphone and speaker handling
 - `pypdf` for bounded local PDF text extraction
-- `Bing RSS` as the optional web-search provider
+- Account-free Google News RSS for current topics, Bing RSS for general web search, and bounded public-page extraction
 
 ## Features
 
@@ -81,7 +81,9 @@ Run the automated test suite before making changes:
 - Local text, code, PDF, Word-document, file-picker image, drag-and-drop, and clipboard-image attachments in Chat
 - Automatic local-model routing with Fast, Balanced, Coding, Reasoning, and Manual profiles
 - In-app installation of curated Ollama models with streamed progress and cancellation
-- Toggleable web search with visible source links on responses
+- Toggleable web search with ranked, deduplicated, domain-diverse sources and visible links
+- Concurrent, bounded extraction of relevant HTML, PDF, text, and JSON page content
+- Direct public-URL research with redirect, MIME-type, download-size, and private-network protections
 - Automatic web-search activation for typed or spoken commands such as `search the web for ...`
 - Cancelable web-search and long-chat memory preparation before local generation begins
 - Typed or spoken commands to open Windows apps and create local files, including real Word documents
@@ -230,7 +232,7 @@ Speaker cleanup is exception-safe. If an output disappears during playback, queu
 
 ## Chat File Attachments
 
-Use `+ File`, drop files onto the Chat composer, or copy an image and press `Ctrl+V` in the composer. Clipboard images appear immediately in the local attachment tray and do not require a temporary file. Paco reads text, source code, configuration, CSV, `.docx`, and text-based PDF files locally. JPEG, PNG, WebP, BMP, GIF, and clipboard images are resized and encoded locally before being sent to Ollama. Attachment extraction runs in the worker pool so large documents cannot freeze the interface.
+Use `+ File`, drop files anywhere on the Paco window while Chat is active, or copy an image and press `Ctrl+V` in the composer. Clipboard images appear immediately in the local attachment tray and do not require a temporary file. Paco reads text, source code, configuration, CSV, `.docx`, and text-based PDF files locally. JPEG, PNG, WebP, BMP, GIF, and clipboard images are resized and encoded locally before being sent to Ollama. Attachment extraction runs in the worker pool so large documents cannot freeze the interface.
 
 Up to five files and three images can be attached at once. Text files are limited to 2 MB; PDFs, Word documents, and images are limited to 12 MB. Extracted text, PDF pages, image dimensions, and encoded image size are capped to keep local models responsive. Scanned PDFs without selectable text require OCR and are rejected with guidance.
 
@@ -300,7 +302,14 @@ screen readers.
 
 ## Web Search
 
-Web search is optional and local-first in the sense that the main assistant runtime, STT, TTS, and model inference stay local. When enabled, the app performs a live search against Bing's RSS search feed, injects the result summaries into the model prompt, and shows the sources used in the assistant response bubble.
+Web search is optional and local-first in the sense that the main assistant runtime, STT, TTS, and model inference stay local. Current, recent, release, and news queries automatically use the public Google News RSS feed without an account, API key, cookies, or sign-in. Paco combines those sources with Bing web and news results, ranks Google News above Bing, deduplicates domains, and extracts relevant text from a bounded number of result pages concurrently. General non-news searches use Bing because Google does not provide an account-free supported backend API for raw web results. HTML, PDF, plain-text, and JSON sources are supported. The resulting source context is injected into the local model prompt and the sources are shown in the assistant response bubble.
+
+No account connection is required. Existing Google Custom Search JSON API customers can optionally provide both process environment variables before starting Paco:
+
+- `GOOGLE_SEARCH_API_KEY`: the Google API key.
+- `GOOGLE_SEARCH_ENGINE_ID`: the Programmable Search Engine `cx` identifier.
+
+Paco does not save these optional credentials in its settings or history. Google states that this API is closed to new customers and existing customers must transition by January 1, 2027. The account-free Google News and Bing paths do not depend on it. See the [official Google API overview](https://developers.google.com/custom-search/v1/overview).
 
 Important behavior:
 
@@ -308,6 +317,10 @@ Important behavior:
 - An explicit `search the web for ...`, `search online for ...`, or `web search ...` command turns it on automatically.
 - Responses that used search are labeled in the chat UI.
 - Source titles, URLs, and snippets are shown under the response.
+- Time-sensitive queries prioritize account-free Google News sources.
+- Public URLs included in a request are fetched directly and prioritized as sources.
+- Page fetching blocks credentials, private and loopback network targets, unsafe redirects, unsupported content types, oversized downloads, and excessive redirect chains.
+- Extracted page text is treated as untrusted data and is bounded per source before it reaches the prompt.
 - If web search fails, the app continues with a local-only model reply instead of breaking the chat flow.
 
 ## Model Routing
@@ -333,74 +346,47 @@ The normal Stop control remains available while web sources are loading or older
 
 ## Agent and Desktop Actions
 
-Use the `Agent` tab for natural conversation plus file, workspace, project, and app actions. It interprets follow-ups from recent Agent context and keeps writes reviewable. The `Chat` tab remains a dedicated conversation history. Spoken action commands are routed to Agent. Examples:
+Use the `Agent` tab for natural conversation, read-only workspace inspection, new-file creation, and app actions. Existing files cannot be edited, replaced, or deleted, and executable project tasks are blocked. The `Chat` tab remains a dedicated conversation history. Spoken action commands are routed to Agent. Examples:
 
 - `list files`
 - `analyze workspace for startup errors`
 - `where are authentication tokens validated and what happens when one is missing?`
-- `add validation so login rejects empty tokens`
-- `make the sidebar responsive on small windows`
 - `explain the project architecture`
 - `investigate why login tests fail`
-- `fix workspace issue: login crashes when the token is empty`
-- `fix the bug where subtraction adds values`
-- `run tests`
-- `run tests in tests/test_agent.py`
-- `build project`
-- `run lint`
-- `check formatting`
-- `format project`
 - `list project scripts`
-- `run project script typecheck`
 - `list files in src`
 - `read file src/app.py`
 - `search files for "TODO" in src`
-- `replace in file src/app.py text "old" with "new"`
-- `replace all in file src/app.py text "old" with "new"`
-- `edit file src/app.py to add input validation`
-- `edit files config.py, src/app.py to rename a shared setting`
 - `open Notepad`
 - `launch Calculator`
 - `open Spotify` (using its Windows Start menu shortcut)
 - `create a file called notes.txt with content Buy milk`
 - `create a file called reports/summary.md with content # Summary`
 - `create a Python file src/health.py that exposes a health check`
-- `build a Python file that prints the first five squares then run it`
-- `run src/health.py`
 - `create a JSON file config/defaults.json that defines development defaults`
 - `create a Word document outlining open source models`
 - `create a Word document named model-guide.docx about open source models`
 - `create Word file` (creates a blank `.docx`)
 
-Agent results appear as command, result, and error cards in a bounded task timeline. Command cards show the workspace in which they were issued. The timeline can show `Current workspace` or `All workspaces`; legacy unscoped cards remain available in the all-workspaces view. Each command shows its live or final state and duration: running, review, approval, success, error, canceled, blocked, discarded, or interrupted after a restart. `Execution` offers an `All tasks` log and isolated output for each recorded command, labeled with state, duration, time, workspace, and command. Streaming output, proposal review, apply results, test output, rejection, cancellation, and errors stay grouped with the initiating command. `Details` on a command card opens its exact persisted record. The selected output can be copied exactly or saved as `.txt`, `.log`, or `.md` through a non-modal dialog. Exports use atomic replacement, must remain inside an allowed Agent folder, and are disabled under Read-only access. Legacy history without task records remains available through All tasks. `Use Again` restores the exact text to the composer for editing, never runs automatically, and refuses to restore a scoped command when a different Agent folder is active. Legacy unscoped events remain usable. Recall is unavailable during active work or a pending script approval. Long model and test tasks show a live phase, elapsed time, a task-local Stop control, and completed, failed, or stopped state. Created, edited, and exported files include validated `Open File` and `Open Folder` controls that persist across restarts. Missing and out-of-scope paths fail safely. Source and text artifacts use Windows' edit action, while executable, installer, and shortcut artifacts expose only `Open Folder` so generated results cannot launch them directly. Test runs open Execution automatically, while the timeline remains available after completion. The latest 80 events, 40 per-task records, 200,000 characters of combined per-task output, and 200,000 characters of All tasks output persist locally in `data/agent_history.json`; malformed history is ignored safely. `Clear All` requires a second click within five seconds, always covers hidden workspace cards and all output records, and can be canceled with `Escape`.
+Agent results appear as command, result, and error cards in a bounded task timeline. Command cards show the workspace in which they were issued. The timeline can show `Current workspace` or `All workspaces`; legacy unscoped cards remain available in the all-workspaces view. Each command shows its live or final state and duration. `Execution` offers an `All tasks` log and isolated output for each recorded command. The selected output can be copied or saved as a new `.txt`, `.log`, or `.md` file; an existing export is never overwritten. Exports must remain inside `sandbox/` and are disabled under Read-only access. Created and exported files include validated `Open File` and `Open Folder` controls. Executable, installer, and shortcut artifacts expose only `Open Folder`. Agent history persists locally in `data/agent_history.json`; malformed history is ignored safely.
 
-Choose the working folder directly in the `Agent` tab. It receives relative file commands; without one, files use `Documents/Paco Files`. Absolute paths must stay inside the chosen folder or the default Paco folder. Natural Word requests use the selected local Ollama model to draft structured content and save a valid `.docx`; if drafting is unavailable, the Agent still creates an editable outline. Explicit filenames are never overwritten, while automatic document names receive a numeric suffix when needed. App launches use known Windows apps, Start menu shortcuts, or explicit `.exe`/`.lnk` paths without invoking a command shell.
+Use Agent's `+ File` button or drop files anywhere on the Paco window while Agent is active. Files appear in a removable local-snapshot tray and can be sent without typed text. Text, code, PDF, Word, and image snapshots remain bounded and local, are treated as untrusted context, and are discarded from the composer after sending. Snapshot uploads may come from outside the Agent workspace without expanding its write boundary, and absolute source paths are not sent to the model. Images route to an installed local vision model.
 
-The `Access` control is saved separately for each Agent workspace. `Standard access` permits explicit file creation, reviewed model edits, and the existing approved project workflows. `Read-only` permits bounded list, read, search, analysis, and planned investigation commands, while blocking direct and model-generated file creation, replacements, edits, fixes, formatting, tests, builds, lint, and project scripts before model or tool execution. App launching remains available because it is outside workspace access. Switching to Read-only discards a pending edit and cancels pending script approval. Modes persist in bounded, atomic `data/agent_permissions.json`; malformed or unreadable permission data fails closed to Read-only until the user explicitly selects a mode.
+Agent is locked to the repository's `sandbox/` folder. Relative and absolute Agent file paths, workspace inspection, generated documents, exports, artifact actions, and Agent attachments must remain inside that folder. Saved legacy workspace selections are ignored and the folder picker is disabled. Natural Word requests use the selected local Ollama model to draft structured content and save a valid `.docx`; if drafting is unavailable, the Agent still creates an editable outline. Explicit filenames are never overwritten, while automatic document names receive a numeric suffix when needed. App launches use known Windows apps, Start menu shortcuts, or explicit `.exe`/`.lnk` paths without invoking a command shell.
 
-Workspace inspection is recursive but bounded, skips dependency/cache folders, rejects path escapes and binary or oversized files, and caps displayed output. Exact replacements refuse ambiguous multiple matches unless `replace all` is explicit. Natural-language `edit file` commands route to the coding model and produce a diff without changing the file. The user must select `Apply Edit`; Agent then revalidates Python, JSON, or TOML, detects concurrent file changes, stores a backup under `Documents/Paco Files/.paco-backups`, and replaces the file atomically. `Discard` leaves the file unchanged.
+The `Access` control is saved separately for each Agent workspace. `Create-only` permits bounded inspection and exclusive creation of new files. It blocks replacements, edits, fixes, deletion, formatting, tests, builds, lint, Python execution, and project scripts. `Read-only` also blocks file creation. App launching remains available because it is outside workspace access. Legacy `Standard access` records migrate to Create-only. Modes persist in bounded, atomic `data/agent_permissions.json`; malformed or unreadable permission data fails closed to Read-only.
 
-`analyze workspace`, `explain project`, and `investigate` commands build a local, source-grounded view of the selected folder. Agent ranks filenames and file contents against the question, sends at most six bounded line-numbered excerpts to the stronger reasoning model, lists every source reviewed, and reports when scan limits were reached. Dependency/cache directories, binary files, oversized files, `.env` variants, credential files, and private-key formats are excluded. Analysis is read-only and treats repository text as untrusted evidence rather than instructions.
+Workspace inspection is recursive but bounded, skips dependency/cache folders, rejects path escapes and binary or oversized files, and caps displayed output. Requests to replace, edit, fix, format, or delete existing files are denied before model or tool execution.
+
+`analyze workspace`, `explain project`, and `investigate` commands build a local, source-grounded view of `sandbox/`. Agent ranks filenames and file contents against the question, sends at most six bounded line-numbered excerpts to the stronger reasoning model, lists every source reviewed, and reports when scan limits were reached. Dependency/cache directories, binary files, oversized files, `.env` variants, credential files, and private-key formats are excluded. Analysis is read-only and treats repository text as untrusted evidence rather than instructions.
 
 Natural workspace questions such as `where are authentication tokens validated?` no longer require a command prefix. Agent creates a strict plan with at most four read-only steps, limited to validated file reads and literal searches across eligible non-sensitive text files. It then synthesizes a cited answer from the original excerpts and bounded tool results. Model-authored writes, commands, network access, unreviewed paths, duplicate steps, and oversized plans are rejected before execution. `Stop Agent` cancels planning, searching, or synthesis without changing files.
 
-Natural implementation requests such as `add validation so login rejects empty tokens` and `make the sidebar responsive on small windows` work without file-specific command syntax. Unmatched language first enters a bounded intent router that uses recent Agent history to distinguish conversation, clarification, workspace questions, existing-file changes, new-file creation, and Python execution. The reasoning model selects evidenced existing files, the coding model drafts replacements, and Agent displays `PROPOSED CHANGE`. Nothing is written until `Apply Change` or `Apply & Test` is selected. Destructive requests remain outside the model-routed execution path.
-
-Reviewable edits use a highlighted unified-diff viewer with addition, deletion, hunk, and file counts. Multi-file proposals default to an `All Changes` view and allow each file to be inspected independently before the unchanged transactional apply step. The visible diff can be copied, long paths retain tooltips, truncated previews remain labeled, and empty diffs disable apply actions.
-
-`fix workspace issue` and `fix the bug where ...` extend that evidence path into a staged repair. The reasoning model selects at most three files from the reviewed evidence and returns a validated structured plan; the coding model then drafts coordinated whole-file replacements. If the latest test run in the same Agent folder failed, its bounded output is included as untrusted diagnostic evidence for both planning and drafting. Agent shows one combined `PROPOSED FIX` diff while every workspace file remains unchanged. `Apply Fix` uses the existing syntax validation, concurrent-change detection, backups, and transactional batch apply. `Apply & Test` performs the same reviewed apply and then runs the detected allowlisted Python, npm, or Cargo test command. If those tests fail, Agent offers `Draft Follow-up Fix`; it rescans the changed workspace, uses the captured failure, and produces another no-write proposal for review. Invalid model plans, unreviewed paths, oversized files, and unsupported test setups fail closed.
+Unmatched language enters a bounded intent router for conversation, clarification, workspace questions, and new-file creation. Any route requesting an existing-file change or execution is denied.
 
 Natural-language new-file requests such as `create a Python file src/health.py that exposes a health check` also route to the coding model, but remain a preview until `Create File` is selected. Paths are validated before model work, generated Python/JSON/TOML is parsed before preview and again before creation, and exclusive creation refuses to overwrite a file that appears after review. Literal commands using `with content`, `containing`, or `that contains` still write exactly the supplied text without model generation.
 
-Create-and-run requests such as `build a Python file that prints the first five squares then run it` produce a complete Python proposal and a `Create & Run` approval action. After approval, Paco creates the reviewed file exclusively and launches it with the selected workspace virtual-environment interpreter, or the application interpreter when no workspace environment exists. The runner never invokes a shell, provides no interactive stdin, captures combined stdout/stderr, enforces a 60-second timeout, supports cancellation, and reports the exit result. Existing scripts can be invoked with `run path/to/script.py`; contextual follow-ups such as `run it` resolve the recent reviewed artifact through the Agent conversation router.
-
-Explicit `edit files` commands accept two to four comma-separated paths. The coding model first creates a coordinated implementation plan, then produces a combined validated diff. Apply verifies every file before writing, creates all backups first, and treats the batch as a transaction: if a later write fails, previously changed files are restored automatically.
-
-`run tests`, `build project`, `run lint`, and `check formatting` detect Python, npm, or Cargo projects and execute only a known tool or configured script through a fixed argument list. Output streams into Agent with a fixed size limit. Runs have a three-minute timeout and a task-specific Stop control that terminates the process tree. Python supports unittest/pytest, package builds, Ruff/Flake8/Pylint, and non-writing Ruff/Black format checks. Node requires the matching `test`, `build`, `lint`, or explicit format-check package script. Rust uses Cargo test/build, Clippy, and `cargo fmt --check`. Optional test targets must remain inside the selected workspace. `check formatting` never writes source files. Model-backed Agent work reports its current scan, plan, draft, and validation phase and exposes `Stop Agent`; cancellation works while Ollama is loading or generating and never applies a partial proposal.
-
-`format project` uses Ruff or Black for Python, Prettier for Node, and rustfmt for Rust. The formatter runs against a bounded temporary workspace copy. Paco compares the result with unchanged source files, displays a per-file unified diff for up to 40 changed files, and offers `Apply Formatting`, `Apply & Test`, or `Discard`. Applying revalidates every original digest, creates backups, and uses the existing transactional batch writer; cancellation, formatter failure, concurrent source changes, and discarded previews never apply staged output.
-
-`list project scripts` reads the bounded `scripts` section from the selected folder's `package.json` without executing anything. `run project script <name>` displays the exact configured command, working folder, and a standard or high-risk warning in Agent. The script runs only after `Run Script` is selected. Paco revalidates the unchanged `package.json` immediately before launch, streams bounded output, supports cancellation and timeout, and does not persist pending approvals. The explicit npm script runs through the platform shell, while automatic `pre<name>` and `post<name>` lifecycle hooks are suppressed.
+Create-and-run, existing-script execution, project tests, builds, lint, formatting, and configured project-script execution are unavailable. `list project scripts` remains a read-only inspection command.
 
 ## Architecture
 
@@ -410,15 +396,15 @@ Paco uses a layered design:
 2. `app.py` creates the Qt application and main window.
 3. UI modules own presentation, signals, task cards, previews, and user approval state.
 4. Service modules own parsing, model access, workspace boundaries, persistence, audio, and process execution.
-5. Worker objects keep model requests, file analysis, audio work, and subprocess output off the UI thread.
+5. Worker objects keep model requests and file analysis off the UI thread.
 
-The Agent uses deterministic parsers for known operations, then a model-backed intent router for natural unmatched requests. Intent output is validated against a closed schema before it can select a tool path. Workspace reads exclude sensitive and oversized files. Workspace writes are resolved under the active folder, previewed, revalidated against concurrent changes, and applied atomically where supported. Python execution and project workflows use fixed argument arrays with `shell=False`; npm scripts are the explicit exception and require a separate approval step.
+The Agent uses deterministic parsers for known operations, then a model-backed intent router for natural unmatched requests. Intent output is validated against a closed schema before it can select a tool path. Workspace reads exclude sensitive and oversized files. New-file targets are resolved under `sandbox/` and created exclusively so existing paths are never overwritten.
 
 Primary boundaries:
 
 - Chat can use local conversation history, attachments, and optional web search.
 - Agent can converse and use workspace-scoped tools.
-- Standard access permits reviewed writes and supported execution.
+- Create-only access permits inspection and exclusive new-file creation.
 - Read-only access permits inspection and conversation but blocks writes and executable project tasks.
 - Repository content, model output, search results, and task output are treated as untrusted data.
 
@@ -431,7 +417,7 @@ Runtime state is intentionally excluded from Git:
 - `cache/`: generated audio and temporary cached artifacts
 - `.venv-win/`: local Python environment
 
-Ollama prompts remain local unless web search is explicitly enabled. Enabling web search sends the search query to Bing RSS. Attachments are processed locally before selected text or image content is sent to the local model. Never commit `.env` files, credentials, private keys, runtime history, or downloaded model weights; the included `.gitignore` excludes these by default.
+Ollama prompts remain local unless web search is explicitly enabled. Enabling web search sends time-sensitive queries to the public Google News RSS endpoint, sends queries to Bing RSS, and makes bounded requests to selected public result pages. The optional legacy Google API is contacted only when both environment variables are configured. Attachments are processed locally before selected text or image content is sent to the local model. Never commit `.env` files, credentials, private keys, runtime history, or downloaded model weights; the included `.gitignore` excludes these by default.
 
 ## Development
 

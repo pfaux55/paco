@@ -32,6 +32,23 @@ class AttachmentServiceTests(unittest.TestCase):
             self.assertEqual(str(path), attachment.path)
             self.assertNotIn("path", attachment.metadata())
 
+    def test_batch_loading_skips_duplicates_and_preserves_existing_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first.txt"
+            second = Path(tmp) / "second.txt"
+            first.write_text("first", encoding="utf-8")
+            second.write_text("second", encoding="utf-8")
+            existing = self.service.load(str(first))
+
+            attachments, added, errors = self.service.load_batch(
+                [existing],
+                [str(first), str(second)],
+            )
+
+            self.assertEqual(1, added)
+            self.assertEqual(["first.txt", "second.txt"], [item.name for item in attachments])
+            self.assertIn("already attached", errors[0])
+
     def test_rejects_binary_and_oversized_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             binary = Path(tmp) / "image.bin"

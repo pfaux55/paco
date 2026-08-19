@@ -16,8 +16,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QImage, QPalette
+from PySide6.QtCore import QCoreApplication, QMimeData, QPoint, QPointF, Qt, QUrl
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QPalette
 from PySide6.QtWidgets import QApplication, QFileDialog
 from PySide6.QtTest import QTest
 
@@ -32,7 +32,7 @@ from local_matrix_assistant.core.models import (
     WebSearchResponse,
 )
 from local_matrix_assistant.services.audio import AudioPlayer, AudioRecorder
-from local_matrix_assistant.services.agent_permissions import READ_ONLY_ACCESS, STANDARD_ACCESS
+from local_matrix_assistant.services.agent_permissions import CREATE_ONLY_ACCESS, READ_ONLY_ACCESS
 from local_matrix_assistant.services.history import HistoryStore
 from local_matrix_assistant.services.context_manager import ContextStats
 from local_matrix_assistant.services.model_router import ModelSelection
@@ -139,15 +139,19 @@ class MainWindowIntegrationTests(unittest.TestCase):
                 window = MainWindow(paths, config)
 
             window.task_runner = ImmediateTaskRunner()
+            sandbox = root / "sandbox"
             self.assertEqual(4, window.page_stack.count())
             self.assertEqual("Agent", window.agent_nav_button.text())
+            self.assertEqual(sandbox.resolve(), window.desktop_action_service.active_working_folder)
+            self.assertFalse(window.agent_panel.choose_folder_button.isEnabled())
 
             window.agent_nav_button.click()
             self.assertEqual(1, window.page_stack.currentIndex())
             message_count = len(window.messages)
             window.agent_panel.command_input.setPlainText("create file agent.txt with content created")
             window._run_agent_command()
-            self.assertEqual("created", (working_folder / "agent.txt").read_text(encoding="utf-8"))
+            self.assertEqual("created", (sandbox / "agent.txt").read_text(encoding="utf-8"))
+            self.assertFalse((working_folder / "agent.txt").exists())
             self.assertEqual(message_count, len(window.messages))
 
             window.ollama_client.chat_stream = (  # type: ignore[method-assign]
@@ -157,7 +161,7 @@ class MainWindowIntegrationTests(unittest.TestCase):
             )
             window.agent_panel.command_input.setPlainText("create a word document outlining open source models")
             window._run_agent_command()
-            word_path = working_folder / "open-source-models.docx"
+            word_path = sandbox / "open-source-models.docx"
             self.assertTrue(word_path.exists())
             with ZipFile(word_path) as archive:
                 self.assertIn("A generated document body.", archive.read("word/document.xml").decode("utf-8"))
@@ -184,16 +188,15 @@ class MainWindowIntegrationTests(unittest.TestCase):
             window.chat_panel.input_box.setPlainText("create file chat-only.txt")
             window._send_from_input()
             self.assertEqual([("test-model", "create file chat-only.txt")], chat_requests)
-            self.assertFalse((working_folder / "chat-only.txt").exists())
+            self.assertFalse((sandbox / "chat-only.txt").exists())
             self.assertEqual(message_count + 1, len(window.messages))
 
             second_folder = root / "second"
             second_folder.mkdir()
             window.agent_nav_button.click()
             window._on_agent_folder_selected([str(second_folder)])
-            self.assertEqual([str(second_folder)], window.config.working_folders)
-            self.assertEqual(str(second_folder), window.config.active_working_folder)
-            self.assertEqual(str(second_folder), window.agent_panel.active_folder_label.text())
+            self.assertEqual(sandbox.resolve(), window.desktop_action_service.active_working_folder)
+            self.assertEqual(str(sandbox.resolve()), window.agent_panel.active_folder_label.text())
             self.assertEqual("Choose Folder", window.agent_panel.choose_folder_button.text())
             self.assertFalse(hasattr(window.settings_panel, "working_folders_list"))
             self.assertEqual(1, window.page_stack.currentIndex())
@@ -203,14 +206,13 @@ class MainWindowIntegrationTests(unittest.TestCase):
                 if card.role == "Command" and card.full_text.startswith("create file agent.txt")
             )
             original_command.reuse_command_button.click()
-            self.assertEqual("", window.agent_panel.command_input.toPlainText())
-            self.assertIn(
-                "switch folders before reusing",
-                window.agent_panel.status_panel.status_label.text(),
+            self.assertEqual(
+                "create file agent.txt with content created",
+                window.agent_panel.command_input.toPlainText(),
             )
             window.close()
 
-    def test_agent_access_mode_persists_per_workspace_and_restores_on_folder_switch(self) -> None:
+    def test_agent_access_mode_persists_for_locked_sandbox(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             paths = build_paths(root)
@@ -233,11 +235,12 @@ class MainWindowIntegrationTests(unittest.TestCase):
                 window.agent_panel.permission_mode_combo.setCurrentIndex(read_only_index)
 
                 self.assertEqual(READ_ONLY_ACCESS, window._agent_permission_mode)
-                self.assertEqual(READ_ONLY_ACCESS, window.agent_permission_store.mode_for(first))
+                sandbox = root / "sandbox"
+                self.assertEqual(READ_ONLY_ACCESS, window.agent_permission_store.mode_for(sandbox))
 
                 window._on_agent_folder_selected([str(second)])
-                self.assertEqual(STANDARD_ACCESS, window._agent_permission_mode)
-                self.assertEqual(STANDARD_ACCESS, window.agent_panel.permission_mode_combo.currentData())
+                self.assertEqual(READ_ONLY_ACCESS, window._agent_permission_mode)
+                self.assertEqual(READ_ONLY_ACCESS, window.agent_panel.permission_mode_combo.currentData())
 
                 window._on_agent_folder_selected([str(first)])
                 self.assertEqual(READ_ONLY_ACCESS, window._agent_permission_mode)
@@ -1371,7 +1374,7 @@ class MainWindowIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             paths = build_paths(Path(tmp))
             config = AppConfig.defaults(paths)
-            work = Path(tmp) / "work"
+            work = Path(tmp) / "sandbox"
             work.mkdir()
             artifact = work / "report.txt"
             artifact.write_text("saved artifact", encoding="utf-8")
@@ -1497,6 +1500,90 @@ class MainWindowIntegrationTests(unittest.TestCase):
             self.assertIn("return 42", user_prompt)
             reloaded = window.history_store.load_conversation(window.active_conversation_id)
             self.assertEqual("review.py", reloaded.messages[-1].metadata["attachments"][0]["name"])
+            window.close()
+
+    def test_window_wide_drop_routes_to_the_active_chat_or_agent_draft(self) -> None:
+        class SequencedAgentClient:
+            def __init__(self) -> None:
+                self.calls: list[list[ChatMessage]] = []
+
+            def chat(self, _model: str, messages: list[ChatMessage], **_kwargs) -> str:
+                self.calls.append(messages)
+                if len(self.calls) == 1:
+                    return '{"kind":"answer","request":"Summarize the attached file"}'
+                return "Agent received the dropped file."
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = build_paths(root)
+            config = AppConfig.defaults(paths)
+            config.ollama_model = "test-model"
+            chat_file = root / "chat-notes.txt"
+            agent_file = root / "agent-notes.txt"
+            chat_file.write_text("chat context", encoding="utf-8")
+            agent_file.write_text("agent context", encoding="utf-8")
+            with (
+                patch.object(MainWindow, "refresh_status", lambda _self: None),
+                patch.object(MainWindow, "showMaximized", lambda _self: None),
+                patch.object(AudioRecorder, "list_inputs", lambda _self: []),
+                patch.object(AudioPlayer, "list_outputs", lambda _self: []),
+            ):
+                window = MainWindow(paths, config)
+            window.task_runner = ImmediateTaskRunner()
+            window.show()
+            QTest.qWait(10)
+
+            def drop_file(target, path: Path) -> tuple[bool, bool]:
+                mime_data = QMimeData()
+                mime_data.setUrls([QUrl.fromLocalFile(str(path))])
+                drag_event = QDragEnterEvent(
+                    QPoint(5, 5),
+                    Qt.DropAction.CopyAction,
+                    mime_data,
+                    Qt.MouseButton.LeftButton,
+                    Qt.KeyboardModifier.NoModifier,
+                )
+                drop_event = QDropEvent(
+                    QPointF(5, 5),
+                    Qt.DropAction.CopyAction,
+                    mime_data,
+                    Qt.MouseButton.LeftButton,
+                    Qt.KeyboardModifier.NoModifier,
+                )
+                QCoreApplication.sendEvent(target, drag_event)
+                QCoreApplication.sendEvent(target, drop_event)
+                return drag_event.isAccepted(), drop_event.isAccepted()
+
+            self.assertEqual((True, True), drop_file(window.header_title, chat_file))
+            self.assertEqual(1, window.chat_panel.attachment_count())
+            self.assertEqual(0, window.agent_panel.attachment_count())
+            chat_requests: list[tuple[str, str]] = []
+
+            def begin_chat_reply(model: str, text: str) -> None:
+                chat_requests.append((model, text))
+                window._set_interaction_busy(False)
+
+            window._begin_assistant_response = begin_chat_reply  # type: ignore[method-assign]
+            window.chat_panel.input_box.setPlainText("Use the dropped notes")
+            window._send_from_input()
+            self.assertEqual("chat-notes.txt", window.messages[-1].metadata["attachments"][0]["name"])
+            self.assertEqual([("test-model", "Use the dropped notes")], chat_requests)
+            self.assertEqual(0, window.chat_panel.attachment_count())
+
+            window.agent_nav_button.click()
+            self.assertEqual((True, True), drop_file(window.sidebar_activity_label, agent_file))
+            self.assertEqual(0, window.chat_panel.attachment_count())
+            self.assertEqual(1, window.agent_panel.attachment_count())
+            window.ollama_client = SequencedAgentClient()
+            window.available_ollama_models = ["qwen3.5:4b"]
+            window.agent_panel.command_input.setPlainText("Summarize the dropped notes")
+            window._run_agent_command()
+            self.assertEqual(0, window.agent_panel.attachment_count())
+            self.assertIn("Agent received the dropped file.", window.agent_panel.action_log.toPlainText())
+            self.assertEqual(2, len(window.ollama_client.calls))
+            self.assertTrue(
+                all("agent context" in call[-1].content for call in window.ollama_client.calls)
+            )
             window.close()
 
     def test_chat_file_picker_is_non_native_and_non_modal(self) -> None:

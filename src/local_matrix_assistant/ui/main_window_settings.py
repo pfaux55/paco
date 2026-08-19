@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import replace
 from functools import partial
 
+from local_matrix_assistant.core.config import (
+    normalize_chat_font_family,
+    normalize_chat_font_size,
+)
 from local_matrix_assistant.core.constants import DEFAULT_ACTIVITY
 from local_matrix_assistant.core.model_catalog import RECOMMENDED_MODEL_NAMES
 from local_matrix_assistant.core.models import ModelPullProgress, ModelPullResult, StatusSnapshot
@@ -65,6 +69,12 @@ class SettingsStatusWindowMixin:
             theme_save_timer.stop()
         persisted = self._update_config(
             theme=normalize_theme(str(self.settings_panel.theme_combo.currentData() or "")),
+            chat_font_family=normalize_chat_font_family(
+                self.settings_panel.font_family_combo.currentText()
+            ),
+            chat_font_size=normalize_chat_font_size(
+                self.settings_panel.font_size_combo.currentData()
+            ),
             ollama_base_url=self.settings_panel.ollama_host_input.text().strip() or self.config.ollama_base_url,
             stt_model_dir=self.settings_panel.stt_path_input.text().strip(),
             tts_model_path=self._selected_voice_model_path() or self.settings_panel.tts_model_input.text().strip(),
@@ -353,7 +363,13 @@ class SettingsStatusWindowMixin:
         theme = normalize_theme(str(self.settings_panel.theme_combo.currentData() or ""))
         if theme == self.config.theme:
             return
-        self.setStyleSheet(stylesheet_for_theme(theme))
+        self.setStyleSheet(
+            stylesheet_for_theme(
+                theme,
+                self.config.chat_font_family,
+                self.config.chat_font_size,
+            )
+        )
         self.config = replace(self.config, theme=theme)
         theme_save_timer = getattr(self, "_theme_save_timer", None)
         if theme_save_timer is not None:
@@ -366,9 +382,39 @@ class SettingsStatusWindowMixin:
         )
 
     def _save_theme_selection(self) -> None:
-        persisted = self._update_config(theme=self.config.theme)
+        persisted = self._update_config(
+            theme=self.config.theme,
+            chat_font_family=self.config.chat_font_family,
+            chat_font_size=self.config.chat_font_size,
+        )
         if not persisted:
-            self._set_activity("Theme changed for this session.")
+            self._set_activity("Appearance changed for this session.")
+
+    def _on_font_changed(self, *_args) -> None:
+        family = normalize_chat_font_family(
+            self.settings_panel.font_family_combo.currentText()
+        )
+        size = normalize_chat_font_size(self.settings_panel.font_size_combo.currentData())
+        if family == self.config.chat_font_family and size == self.config.chat_font_size:
+            return
+        self.setStyleSheet(stylesheet_for_theme(self.config.theme, family, size))
+        self.config = replace(
+            self.config,
+            chat_font_family=family,
+            chat_font_size=size,
+        )
+        save_timer = getattr(self, "_theme_save_timer", None)
+        if save_timer is not None:
+            save_timer.start()
+            self._set_activity("Chat font changed.")
+            return
+        persisted = self._update_config(
+            chat_font_family=family,
+            chat_font_size=size,
+        )
+        self._set_activity(
+            "Chat font changed." if persisted else "Chat font changed for this session."
+        )
 
     def _on_model_pull_error(self, message: str) -> None:
         model_name = self._active_model_pull_name

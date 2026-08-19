@@ -158,6 +158,20 @@ class CompactAssistantTests(unittest.TestCase):
         self.assertIn("border-radius: 4px", stylesheet)
         self.assertIn("width: 8px", stylesheet)
 
+    def test_compact_mode_uses_saved_font_family_and_size(self) -> None:
+        config = build_config()
+        config.chat_font_family = "Arial"
+        config.chat_font_size = 18
+        window = CompactAssistantWindow(
+            config,
+            ollama_client=RecordingOllama(),
+            start_status_check=False,
+        )
+
+        self.assertIn('font-family: "Arial";', window.styleSheet())
+        self.assertIn("font-size: 18pt;", window.styleSheet())
+        window.close()
+
     def test_capture_uses_cursor_screen_hides_overlay_and_is_consumed_once(self) -> None:
         client = RecordingOllama()
         window = self.build_window(client)

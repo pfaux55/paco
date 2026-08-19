@@ -98,6 +98,11 @@ class WebSearchResult:
     domain: str = ""
     published_at: str = ""
     source_type: str = "web"
+    extracted_text: str = ""
+    content_type: str = ""
+    word_count: int = 0
+    search_rank: int = 0
+    provider: str = ""
 
 
 @dataclass(slots=True)

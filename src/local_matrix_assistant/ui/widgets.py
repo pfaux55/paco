@@ -548,6 +548,9 @@ class MessageBubble(QFrame):
                 title = str(source.get("title", source.get("url", "Source")))
                 url = str(source.get("url", ""))
                 snippet = str(source.get("snippet", "")).strip()
+                provider = str(source.get("provider", "")).strip()
+                if provider:
+                    title = f"{title} [{provider}]"
                 lines.append(f"{index}. {safe_markdown_link(title, url)}")
                 if snippet:
                     lines.append(f"   {snippet}")

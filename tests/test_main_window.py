@@ -13,7 +13,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtWidgets import QApplication, QMainWindow, QScrollArea
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import QApplication, QFrame, QLabel, QMainWindow, QScrollArea
 
 from local_matrix_assistant.core.config import AppConfig
 from local_matrix_assistant.core.models import (
@@ -173,6 +175,62 @@ class MainWindowStateTests(unittest.TestCase):
         self.assertGreater(panel.model_install_button.width(), 0)
         panel.close()
 
+    def test_settings_page_uses_grouped_cards_and_a_persistent_action_bar(self) -> None:
+        panel = SettingsPanel(build_config())
+        cards = panel.findChildren(QFrame, "settingsCard")
+        action_bar = panel.findChild(QFrame, "settingsActionBar")
+        scroll = panel.findChild(QScrollArea, "settingsScroll")
+
+        self.assertEqual(
+            ["Appearance settings", "Local AI settings", "Voice runtime settings"],
+            [card.accessibleName() for card in cards],
+        )
+        self.assertIsNotNone(action_bar)
+        self.assertIsNotNone(scroll)
+        self.assertIsNone(panel.findChild(QFrame, "settingsHero"))
+        self.assertEqual([], panel.findChildren(QLabel, "settingsSectionBadge"))
+        assert action_bar is not None and scroll is not None
+        self.assertFalse(scroll.isAncestorOf(action_bar))
+        self.assertEqual("primaryButton", panel.save_button.objectName())
+        panel.close()
+
+    def test_font_options_are_plain_non_editable_aligned_dropdowns(self) -> None:
+        panel = SettingsPanel(build_config())
+        panel.resize(796, 640)
+        panel.show()
+        self.app.processEvents()
+
+        self.assertFalse(panel.font_family_combo.isEditable())
+        self.assertFalse(panel.font_size_combo.isEditable())
+        self.assertEqual(
+            panel.font_family_combo.height(),
+            panel.font_size_combo.height(),
+        )
+        self.assertTrue(
+            all(
+                panel.font_family_combo.itemIcon(index).isNull()
+                for index in range(panel.font_family_combo.count())
+            )
+        )
+        self.assertTrue(
+            all(
+                isinstance(
+                    panel.font_family_combo.itemData(
+                        index,
+                        Qt.ItemDataRole.FontRole,
+                    ),
+                    QFont,
+                )
+                and panel.font_family_combo.itemData(
+                    index,
+                    Qt.ItemDataRole.FontRole,
+                ).family()
+                == panel.font_family_combo.itemText(index)
+                for index in range(panel.font_family_combo.count())
+            )
+        )
+        panel.close()
+
     def test_theme_selector_applies_and_persists_the_selected_theme(self) -> None:
         config = build_config()
         window = MainWindow.__new__(MainWindow)
@@ -257,6 +315,37 @@ class MainWindowStateTests(unittest.TestCase):
             )
         )
         panel.close()
+
+    def test_font_selector_applies_chat_input_and_compact_typography(self) -> None:
+        config = build_config()
+        window = MainWindow.__new__(MainWindow)
+        QMainWindow.__init__(window)
+        window.config = config
+        window.settings_panel = SettingsPanel(config)
+        window._set_activity = lambda _text: None  # type: ignore[method-assign]
+
+        def fake_update_config(**changes) -> bool:
+            window.config = replace(window.config, **changes)
+            return True
+
+        window._update_config = fake_update_config  # type: ignore[method-assign]
+        selected_family = window.settings_panel.font_family_combo.itemText(0)
+        window.settings_panel.font_family_combo.setCurrentText(selected_family)
+        window.settings_panel.font_size_combo.setCurrentIndex(
+            window.settings_panel.font_size_combo.findData(16)
+        )
+        window._on_font_changed()
+
+        stylesheet = window.styleSheet()
+        self.assertEqual(selected_family, window.config.chat_font_family)
+        self.assertEqual(16, window.config.chat_font_size)
+        self.assertIn(f'font-family: "{selected_family}";', stylesheet)
+        self.assertIn("font-size: 16pt;", stylesheet)
+        self.assertIn("QLabel#messageBody", stylesheet)
+        self.assertIn("QPlainTextEdit#chatInput", stylesheet)
+        self.assertIn("QWidget#compactAssistant QLabel", stylesheet)
+        window.settings_panel.close()
+        window.deleteLater()
 
     def test_new_theme_stylesheets_are_distinct(self) -> None:
         stylesheets = {

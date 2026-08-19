@@ -131,11 +131,23 @@ class DesktopActionService:
         *,
         working_folders: list[str] | None = None,
         active_working_folder: str = "",
+        locked_root: Path | None = None,
     ) -> None:
-        self.default_files_dir = default_files_dir or (Path.home() / "Documents" / "Paco Files")
+        self.locked_root = locked_root.resolve() if locked_root is not None else None
+        if self.locked_root is not None:
+            self.locked_root.mkdir(parents=True, exist_ok=True)
+        self.default_files_dir = (
+            self.locked_root
+            or default_files_dir
+            or (Path.home() / "Documents" / "Paco Files")
+        )
         self.update_working_folders(working_folders or [], active_working_folder)
 
     def update_working_folders(self, folders: list[str], active_folder: str = "") -> None:
+        if self.locked_root is not None:
+            self.working_folders = [self.locked_root]
+            self.active_working_folder = self.locked_root
+            return
         normalized: list[Path] = []
         seen: set[str] = set()
         for folder in folders:

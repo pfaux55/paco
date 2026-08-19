@@ -26,7 +26,13 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName(f"{APP_NAME} Compact")
     app.setWindowIcon(paco_icon())
-    app.setStyleSheet(stylesheet_for_theme(config.theme))
+    app.setStyleSheet(
+        stylesheet_for_theme(
+            config.theme,
+            config.chat_font_family,
+            config.chat_font_size,
+        )
+    )
     app.setFont(QFont("Consolas", 10))
 
     window = CompactAssistantWindow(config)

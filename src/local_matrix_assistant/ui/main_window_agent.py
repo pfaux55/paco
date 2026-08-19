@@ -4,12 +4,12 @@ import os
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QIODevice, QSaveFile
 from PySide6.QtWidgets import QFileDialog
 
 from local_matrix_assistant.core.models import ChatMessage
 from local_matrix_assistant.services.context_manager import ContextManager
-from local_matrix_assistant.services.agent_permissions import READ_ONLY_ACCESS, STANDARD_ACCESS
+from local_matrix_assistant.services.agent_permissions import CREATE_ONLY_ACCESS, READ_ONLY_ACCESS
+from local_matrix_assistant.services.attachments import AttachmentService, LocalAttachment
 from local_matrix_assistant.services.agent_intent import AgentIntentService
 from local_matrix_assistant.services.desktop_actions import DesktopAction, DesktopActionError, DesktopActionResult
 from local_matrix_assistant.services.model_router import ModelRouter
@@ -58,6 +58,7 @@ def _ignore_phase(_message: str) -> None:
 
 
 class AgentWindowMixin:
+    _max_agent_attachment_characters = 12_000
     _read_only_workspace_actions = frozenset(
         {
             "list_files",
@@ -67,6 +68,9 @@ class AgentWindowMixin:
             "plan_workspace_task",
             "interpret_request",
         }
+    )
+    _create_only_workspace_actions = _read_only_workspace_actions | frozenset(
+        {"draft_create", "draft_auto_create"}
     )
 
     def _open_agent_artifact_file(self, path: str) -> None:
@@ -166,16 +170,15 @@ class AgentWindowMixin:
             raise DesktopActionError("Choose an existing folder for the Agent output file.")
         if destination.is_dir():
             raise DesktopActionError("Choose a file name, not a folder.")
-        output_file = QSaveFile(str(destination))
-        output_file.setDirectWriteFallback(False)
-        if not output_file.open(QIODevice.OpenModeFlag.WriteOnly):
-            raise DesktopActionError(f"Could not save Agent output: {output_file.errorString()}")
-        encoded = content.encode("utf-8")
-        if output_file.write(encoded) != len(encoded):
-            output_file.cancelWriting()
-            raise DesktopActionError(f"Could not save Agent output: {output_file.errorString()}")
-        if not output_file.commit():
-            raise DesktopActionError(f"Could not save Agent output: {output_file.errorString()}")
+        try:
+            with destination.open("x", encoding="utf-8", newline="") as output_file:
+                output_file.write(content)
+        except FileExistsError as exc:
+            raise DesktopActionError(
+                f"The file already exists and was not overwritten: {destination}"
+            ) from exc
+        except OSError as exc:
+            raise DesktopActionError(f"Could not save Agent output: {exc}") from exc
         return destination
 
     def _on_agent_output_export_finished(self, result: int) -> None:
@@ -187,6 +190,10 @@ class AgentWindowMixin:
             dialog.deleteLater()
 
     def _choose_agent_folder(self) -> None:
+        locked_root = getattr(self.desktop_action_service, "locked_root", None)
+        if locked_root is not None:
+            self._set_activity(f"Agent is locked to: {locked_root}")
+            return
         existing_dialog = getattr(self, "_agent_folder_dialog", None)
         if existing_dialog is not None:
             existing_dialog.show()
@@ -210,6 +217,10 @@ class AgentWindowMixin:
 
     def _on_agent_folder_selected(self, selected_paths: list[str]) -> None:
         if not selected_paths:
+            return
+        locked_root = getattr(self.desktop_action_service, "locked_root", None)
+        if locked_root is not None:
+            self._set_activity(f"Agent is locked to: {locked_root}")
             return
         selected = os.path.abspath(os.path.expanduser(selected_paths[0]))
         if not Path(selected).is_dir():
@@ -238,6 +249,104 @@ class AgentWindowMixin:
         if dialog is not None:
             dialog.deleteLater()
 
+    def _choose_agent_attachments(self) -> None:
+        if self._awaiting_response:
+            self._set_activity("Wait for the current Agent task before attaching files.")
+            return
+        existing_dialog = getattr(self, "_agent_file_dialog", None)
+        if existing_dialog is not None:
+            existing_dialog.show()
+            existing_dialog.raise_()
+            existing_dialog.activateWindow()
+            return
+        pending = list(getattr(self, "_pending_agent_attachments", []))
+        locked_root = getattr(self.desktop_action_service, "locked_root", None)
+        initial_folder = str(
+            locked_root
+            or (
+                Path(pending[-1].path).parent
+                if pending and Path(pending[-1].path).is_absolute()
+                else Path.home()
+            )
+        )
+        dialog = QFileDialog(self, "Attach Files to Agent", initial_folder)
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFiles)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setModal(False)
+        dialog.setNameFilter(
+            "Text, code, documents, and images (*.txt *.md *.py *.js *.ts *.tsx *.jsx *.json *.yaml *.yml "
+            "*.toml *.ini *.cfg *.csv *.tsv *.html *.css *.sql *.sh *.ps1 *.bat *.docx *.pdf "
+            "*.jpg *.jpeg *.png *.webp *.bmp *.gif);;All files (*)"
+        )
+        dialog.filesSelected.connect(self._add_agent_attachment_paths)
+        dialog.finished.connect(self._on_agent_attachment_dialog_finished)
+        self._agent_file_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _on_agent_attachment_dialog_finished(self, result: int) -> None:
+        del result
+        dialog = getattr(self, "_agent_file_dialog", None)
+        self._agent_file_dialog = None
+        if dialog is not None:
+            dialog.deleteLater()
+
+    def _add_agent_attachment_paths(self, paths: list[str]) -> None:
+        if self._awaiting_response:
+            self._set_activity("Wait for the current Agent task before attaching files.")
+            return
+        if not paths:
+            return
+        service = getattr(self, "attachment_service", None) or AttachmentService()
+        pending = list(getattr(self, "_pending_agent_attachments", []))
+        self._set_interaction_busy(True, allow_cancel=False)
+        self._set_activity(f"Reading {len(paths)} local Agent file{'s' if len(paths) != 1 else ''}...")
+        worker = FunctionWorker(lambda: service.load_batch(pending, paths))
+        self.task_runner.start(
+            worker,
+            self._on_agent_attachments_loaded,
+            self._on_agent_attachment_load_error,
+        )
+
+    def _on_agent_attachments_loaded(self, payload: object) -> None:
+        self._set_interaction_busy(False)
+        if not isinstance(payload, tuple) or len(payload) != 3:
+            self._set_activity("Agent attachment reader returned an invalid result.")
+            return
+        pending, added, errors = payload
+        if not isinstance(pending, list) or not isinstance(added, int) or not isinstance(errors, list):
+            self._set_activity("Agent attachment reader returned an invalid result.")
+            return
+        self._pending_agent_attachments = pending
+        self.agent_panel.set_pending_attachments(pending)
+        if added:
+            status = f"Attached {added} local Agent file{'s' if added != 1 else ''}."
+            if errors:
+                status += f" Skipped: {errors[0]}"
+            self._set_activity(status)
+        elif errors:
+            self._set_activity(errors[0])
+
+    def _on_agent_attachment_load_error(self, message: str) -> None:
+        self._set_interaction_busy(False)
+        self._set_activity(f"Could not read local Agent file: {message}")
+
+    def _remove_agent_attachment(self, path: str) -> None:
+        key = os.path.normcase(os.path.abspath(path))
+        pending = [
+            item
+            for item in getattr(self, "_pending_agent_attachments", [])
+            if os.path.normcase(os.path.abspath(item.path)) != key
+        ]
+        self._pending_agent_attachments = pending
+        self.agent_panel.set_pending_attachments(pending)
+        self._set_activity("Agent file removed.")
+
+    def _clear_pending_agent_attachments(self) -> None:
+        self._pending_agent_attachments = []
+        self.agent_panel.set_pending_attachments([])
+
     def _run_agent_command(self) -> None:
         if self._awaiting_response:
             message = "Wait for the current task to finish."
@@ -255,10 +364,21 @@ class AgentWindowMixin:
             self._set_activity(message)
             return
         text = self.agent_panel.take_command()
-        if not text:
+        attachments = list(getattr(self, "_pending_agent_attachments", []))
+        if not text and not attachments:
             self.agent_panel.append_log("Agent", "Enter a request first.")
             return
+        if not text:
+            text = (
+                "Review the attached file."
+                if len(attachments) == 1
+                else "Review the attached files."
+            )
+        self._active_agent_attachments = attachments
+        self._clear_pending_agent_attachments()
         self._try_run_agent_command(text)
+        if not getattr(self, "_awaiting_response", False):
+            self._active_agent_attachments = []
 
     def _try_run_agent_command(self, text: str, *, source: str = "typed") -> bool:
         if getattr(self, "_pending_workspace_edit", None) is not None:
@@ -293,13 +413,12 @@ class AgentWindowMixin:
                     script_listing = script_service.list_scripts()
                     action = None
                 else:
-                    if self._agent_is_read_only():
-                        raise DesktopActionError(self._read_only_denial_message())
                     action = script_service.plan(script_request)
+                    blocked = self._permission_block_message(action)
+                    if blocked:
+                        raise DesktopActionError(blocked)
             else:
                 project_request = project_service.parse(text)
-                if project_request is not None and self._agent_is_read_only():
-                    raise DesktopActionError(self._read_only_denial_message())
                 action = (
                     project_service.plan(project_request)
                     if project_request is not None
@@ -331,6 +450,7 @@ class AgentWindowMixin:
                 action is None
                 and script_listing is None
                 and source != "voice"
+                and not getattr(self, "_active_agent_attachments", [])
                 and WorkspaceTaskService.can_plan(text)
             ):
                 action = WorkspaceAction("plan_workspace_task", query=WorkspaceTaskService.clean_request(text))
@@ -366,9 +486,8 @@ class AgentWindowMixin:
                 return False
             self.agent_panel.append_log("Command", text)
             message = (
-                "Use an Agent command to analyze, inspect, or edit workspace files, draft a new file, run tests, "
-                "build, lint, check or review formatting, approve a configured project script, create a literal "
-                "file, build a single-file app or game, or open an app."
+                "Use an Agent command to analyze or inspect workspace files, create a new file without "
+                "overwriting one, list configured project scripts, or open an app."
             )
             self.agent_panel.append_log("Agent", message)
             self.agent_panel.finish_task_detail("error")
@@ -383,7 +502,7 @@ class AgentWindowMixin:
             return True
 
         assert isinstance(action, (DesktopAction, WorkspaceAction, ProjectTaskPlan, ProjectScriptPlan))
-        blocked = self._read_only_block_message(action)
+        blocked = self._permission_block_message(action)
         if blocked:
             self._show_agent_page()
             role = "Voice command" if source == "voice" else "Command"
@@ -537,37 +656,62 @@ class AgentWindowMixin:
             }
         return action.kind == "create_word_document" and action.generate_content
 
-    def _read_only_block_message(
+    def _permission_block_message(
         self,
         action: DesktopAction | WorkspaceAction | ProjectTaskPlan | ProjectScriptPlan,
     ) -> str:
-        if not self._agent_is_read_only():
-            return ""
-        if isinstance(action, WorkspaceAction) and action.kind in self._read_only_workspace_actions:
-            return ""
-        if isinstance(action, DesktopAction) and action.kind == "open_app":
-            return ""
-        return self._read_only_denial_message()
+        mode = getattr(self, "_agent_permission_mode", CREATE_ONLY_ACCESS)
+        if mode == READ_ONLY_ACCESS:
+            if isinstance(action, WorkspaceAction) and action.kind in self._read_only_workspace_actions:
+                return ""
+            if isinstance(action, DesktopAction) and action.kind == "open_app":
+                return ""
+            return self._read_only_denial_message()
+        if mode == CREATE_ONLY_ACCESS:
+            if isinstance(action, WorkspaceAction) and action.kind in self._create_only_workspace_actions:
+                return ""
+            if isinstance(action, DesktopAction) and action.kind in {
+                "create_file",
+                "create_word_document",
+                "open_app",
+            }:
+                return ""
+            return self._create_only_denial_message()
+        return "Blocked because the Agent workspace access mode is invalid."
 
     @staticmethod
     def _read_only_denial_message() -> str:
         return (
-            "Blocked by Read-only access. This workspace allows inspection only; switch to Standard access "
-            "before creating or changing files or running executable project tasks."
+            "Blocked by Read-only access. This workspace allows inspection only; switch to Create-only "
+            "before creating a new file."
+        )
+
+    @staticmethod
+    def _create_only_denial_message() -> str:
+        return (
+            "Blocked by Create-only access. Agent can create new files, but cannot edit, replace, delete, "
+            "format, or run executable project tasks."
+        )
+
+    def _mutation_denial_message(self) -> str:
+        return (
+            self._read_only_denial_message()
+            if self._agent_is_read_only()
+            else self._create_only_denial_message()
         )
 
     def _agent_is_read_only(self) -> bool:
-        return getattr(self, "_agent_permission_mode", STANDARD_ACCESS) == READ_ONLY_ACCESS
+        return getattr(self, "_agent_permission_mode", CREATE_ONLY_ACCESS) == READ_ONLY_ACCESS
 
     def _load_agent_permission_mode(self, folder: Path) -> None:
         store = getattr(self, "agent_permission_store", None)
-        mode = store.mode_for(folder) if store is not None else STANDARD_ACCESS
+        mode = store.mode_for(folder) if store is not None else CREATE_ONLY_ACCESS
         self._agent_permission_mode = mode
         self.agent_panel.set_permission_mode(mode)
 
     def _on_agent_permission_changed(self, mode: str) -> None:
-        normalized = READ_ONLY_ACCESS if mode == READ_ONLY_ACCESS else STANDARD_ACCESS
-        previous = getattr(self, "_agent_permission_mode", STANDARD_ACCESS)
+        normalized = READ_ONLY_ACCESS if mode == READ_ONLY_ACCESS else CREATE_ONLY_ACCESS
+        previous = getattr(self, "_agent_permission_mode", CREATE_ONLY_ACCESS)
         if self._awaiting_response:
             self.agent_panel.set_permission_mode(previous)
             message = "Wait for the current Agent task before changing workspace access."
@@ -607,7 +751,20 @@ class AgentWindowMixin:
                 f"Read-only access enabled for {folder}. File writes and executable project tasks are blocked."
             )
         else:
-            message = f"Standard access enabled for {folder}. Explicit and reviewed changes are available."
+            pending = getattr(self, "_pending_workspace_edit", None)
+            pending_create = pending.edit if isinstance(pending, WorkspaceFixPreview) else pending
+            if pending is not None and not isinstance(pending_create, WorkspaceCreatePreview):
+                self._discard_pending_workspace_edit(
+                    "Create-only access enabled; the proposed edit was discarded."
+                )
+            if getattr(self, "_pending_project_script_plan", None) is not None:
+                self._reject_project_script(
+                    "Create-only access enabled; project-script approval was canceled."
+                )
+            message = (
+                f"Create-only access enabled for {folder}. Agent can inspect and create new files; "
+                "edits, deletion, and executable project tasks are blocked."
+            )
         self.agent_panel.append_log("Agent", message)
         self._set_activity(message)
 
@@ -628,7 +785,13 @@ class AgentWindowMixin:
             available = [combo.itemText(index) for index in range(combo.count())]
         manual_model = self._agent_model_name()
         router = getattr(self, "model_router", None) or ModelRouter()
-        return router.select(prompt, "coding", available, manual_model).model
+        return router.select(
+            prompt,
+            "coding",
+            available,
+            manual_model,
+            requires_vision=self._agent_request_requires_vision(),
+        ).model
 
     def _agent_analysis_model_name(self, prompt: str) -> str:
         available = list(getattr(self, "available_ollama_models", []))
@@ -638,7 +801,19 @@ class AgentWindowMixin:
             available = [combo.itemText(index) for index in range(combo.count())]
         manual_model = self._agent_model_name()
         router = getattr(self, "model_router", None) or ModelRouter()
-        return router.select(prompt, "reasoning", available, manual_model).model
+        return router.select(
+            prompt,
+            "reasoning",
+            available,
+            manual_model,
+            requires_vision=self._agent_request_requires_vision(),
+        ).model
+
+    def _agent_request_requires_vision(self) -> bool:
+        return any(
+            attachment.image_data
+            for attachment in getattr(self, "_active_agent_attachments", [])
+        )
 
     def _execute_cancellable_agent_action(
         self,
@@ -683,7 +858,7 @@ class AgentWindowMixin:
         | WorkspaceFixPreview
         | ProjectTaskPlan
     ):
-        blocked = self._read_only_block_message(action)
+        blocked = self._permission_block_message(action)
         if blocked:
             raise DesktopActionError(blocked)
         if isinstance(action, WorkspaceAction):
@@ -788,6 +963,25 @@ class AgentWindowMixin:
         options: dict | None = None,
     ) -> str:
         self._ensure_agent_action_active(should_cancel)
+        attachments = list(getattr(self, "_active_agent_attachments", []))
+        if attachments:
+            prepared_messages = list(messages)
+            for index in range(len(prepared_messages) - 1, -1, -1):
+                message = prepared_messages[index]
+                if message.role != "user":
+                    continue
+                metadata = dict(message.metadata) if isinstance(message.metadata, dict) else {}
+                metadata["attachments"] = self._agent_attachment_metadata(attachments)
+                prepared_messages[index] = AttachmentService.augment_message(
+                    ChatMessage(
+                        role=message.role,
+                        content=message.content,
+                        timestamp=message.timestamp,
+                        metadata=metadata,
+                    )
+                )
+                break
+            messages = prepared_messages
         chat_stream = getattr(self.ollama_client, "chat_stream", None)
         if callable(chat_stream):
             result = (
@@ -808,6 +1002,22 @@ class AgentWindowMixin:
         if not content:
             raise OllamaError("Ollama returned an empty response.")
         return content
+
+    def _agent_attachment_metadata(
+        self,
+        attachments: list[LocalAttachment],
+    ) -> list[dict[str, object]]:
+        remaining = self._max_agent_attachment_characters
+        metadata: list[dict[str, object]] = []
+        for attachment in attachments[: AttachmentService.max_files]:
+            item = attachment.metadata()
+            content = str(item.get("content", ""))
+            bounded_content = content[:remaining]
+            item["content"] = bounded_content
+            item["truncated"] = bool(item.get("truncated")) or len(bounded_content) < len(content)
+            remaining = max(0, remaining - len(bounded_content))
+            metadata.append(item)
+        return metadata
 
     @staticmethod
     def _ensure_agent_action_active(should_cancel: Callable[[], bool]) -> None:
@@ -887,30 +1097,17 @@ class AgentWindowMixin:
                 should_cancel,
                 on_phase,
             )
-        if self._agent_is_read_only():
-            raise DesktopActionError(self._read_only_denial_message())
         if intent.kind == "workspace_run":
-            project_service = getattr(self, "project_task_service", None)
-            if project_service is None:
-                project_service = ProjectTaskService(self.desktop_action_service)
-                self.project_task_service = project_service
-            return project_service.plan(ProjectTaskRequest("run_python", intent.request))
+            raise DesktopActionError(self._mutation_denial_message())
         if intent.kind == "workspace_change":
-            return self._draft_workspace_fix(
-                WorkspaceAction("draft_workspace_change", query=intent.request),
-                reasoning_model,
-                coding_model,
-                workspace_service,
-                should_cancel,
-                on_phase,
-            )
+            raise DesktopActionError(self._mutation_denial_message())
+        if intent.kind == "workspace_create_and_run":
+            raise DesktopActionError(self._mutation_denial_message())
+        blocked = self._permission_block_message(WorkspaceAction("draft_auto_create"))
+        if blocked:
+            raise DesktopActionError(blocked)
         return self._draft_workspace_auto_create(
-            WorkspaceAction(
-                "draft_auto_create_and_run"
-                if intent.kind == "workspace_create_and_run"
-                else "draft_auto_create",
-                query=intent.request,
-            ),
+            WorkspaceAction("draft_auto_create", query=intent.request),
             coding_model,
             workspace_service,
             should_cancel,
@@ -1779,6 +1976,7 @@ class AgentWindowMixin:
         self._apply_audio_state("Idle")
 
     def _finish_agent_action(self) -> None:
+        self._active_agent_attachments = []
         self._set_interaction_busy(False)
 
     def _apply_pending_workspace_edit(self, *, run_tests: bool = False) -> None:
@@ -1788,9 +1986,17 @@ class AgentWindowMixin:
             (WorkspaceCreatePreview, WorkspaceEditPreview, WorkspaceBatchEditPreview, WorkspaceFixPreview),
         ) or self._awaiting_response:
             return
-        if getattr(self, "_agent_permission_mode", STANDARD_ACCESS) == READ_ONLY_ACCESS:
+        proposed_action = (
+            WorkspaceAction(
+                "draft_create_and_run" if preview.run_after_create else "draft_create"
+            )
+            if isinstance(preview, WorkspaceCreatePreview)
+            else WorkspaceAction("draft_edit")
+        )
+        blocked = self._permission_block_message(proposed_action)
+        if blocked:
             self._discard_pending_workspace_edit(
-                "Read-only access is active; the proposed change was discarded without writing files."
+                f"{blocked} The proposed change was discarded without writing files."
             )
             return
         workspace_service = getattr(self, "workspace_action_service", None) or WorkspaceActionService(
@@ -1926,7 +2132,7 @@ class AgentWindowMixin:
         *,
         applied_fix_issue: str = "",
     ) -> None:
-        blocked = self._read_only_block_message(plan)
+        blocked = self._permission_block_message(plan)
         if blocked:
             self.agent_panel.append_log("Agent", blocked)
             self.agent_panel.finish_task_detail("blocked")
@@ -1980,7 +2186,7 @@ class AgentWindowMixin:
         plan = getattr(self, "_pending_project_script_plan", None)
         if not isinstance(plan, ProjectScriptPlan) or self._awaiting_response:
             return
-        blocked = self._read_only_block_message(plan)
+        blocked = self._permission_block_message(plan)
         if blocked:
             self._reject_project_script(blocked)
             return
@@ -2012,7 +2218,7 @@ class AgentWindowMixin:
         plan: ProjectScriptPlan,
         service: ProjectScriptService,
     ) -> None:
-        blocked = self._read_only_block_message(plan)
+        blocked = self._permission_block_message(plan)
         if blocked:
             self.agent_panel.append_log("Agent", blocked)
             self.agent_panel.finish_task_detail("blocked")
@@ -2056,7 +2262,7 @@ class AgentWindowMixin:
         plan: ProjectTaskPlan,
         service: ProjectFormattingService,
     ) -> None:
-        blocked = self._read_only_block_message(plan)
+        blocked = self._permission_block_message(plan)
         if blocked:
             self.agent_panel.append_log("Agent", blocked)
             self.agent_panel.finish_task_detail("blocked")

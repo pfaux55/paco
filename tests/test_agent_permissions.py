@@ -14,8 +14,8 @@ if str(SRC) not in sys.path:
 
 from local_matrix_assistant.services.agent_permissions import (
     AgentPermissionStore,
+    CREATE_ONLY_ACCESS,
     READ_ONLY_ACCESS,
-    STANDARD_ACCESS,
 )
 
 
@@ -32,10 +32,10 @@ class AgentPermissionStoreTests(unittest.TestCase):
 
             restored = AgentPermissionStore(path)
             self.assertEqual(READ_ONLY_ACCESS, restored.mode_for(first))
-            self.assertEqual(STANDARD_ACCESS, restored.mode_for(second))
+            self.assertEqual(CREATE_ONLY_ACCESS, restored.mode_for(second))
 
-            restored.set_mode(first, STANDARD_ACCESS)
-            self.assertEqual(STANDARD_ACCESS, AgentPermissionStore(path).mode_for(first))
+            restored.set_mode(first, CREATE_ONLY_ACCESS)
+            self.assertEqual(CREATE_ONLY_ACCESS, AgentPermissionStore(path).mode_for(first))
 
     def test_malformed_oversized_and_unknown_records_fail_closed_to_read_only(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -68,9 +68,9 @@ class AgentPermissionStoreTests(unittest.TestCase):
             store = AgentPermissionStore(path)
             self.assertEqual(READ_ONLY_ACCESS, store.mode_for(root))
 
-            store.set_mode(root, STANDARD_ACCESS)
+            store.set_mode(root, CREATE_ONLY_ACCESS)
 
-            self.assertEqual(STANDARD_ACCESS, AgentPermissionStore(path).mode_for(root))
+            self.assertEqual(CREATE_ONLY_ACCESS, AgentPermissionStore(path).mode_for(root))
 
     def test_failed_atomic_save_restores_in_memory_state_and_cleans_temp(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,7 +85,7 @@ class AgentPermissionStoreTests(unittest.TestCase):
                 with self.assertRaisesRegex(OSError, "disk full"):
                     store.set_mode(root, READ_ONLY_ACCESS)
 
-            self.assertEqual(STANDARD_ACCESS, store.mode_for(root))
+            self.assertEqual(CREATE_ONLY_ACCESS, store.mode_for(root))
             self.assertFalse(path.with_suffix(".json.tmp").exists())
 
     def test_invalid_mode_is_rejected(self) -> None:
@@ -93,6 +93,17 @@ class AgentPermissionStoreTests(unittest.TestCase):
             store = AgentPermissionStore(Path(tmp) / "permissions.json")
             with self.assertRaisesRegex(ValueError, "Unsupported"):
                 store.set_mode(tmp, "full_access")
+
+    def test_legacy_standard_access_is_migrated_to_create_only(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / "permissions.json"
+            path.write_text(
+                json.dumps({"workspaces": [{"path": str(root), "mode": "standard"}]}),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(CREATE_ONLY_ACCESS, AgentPermissionStore(path).mode_for(root))
 
 
 if __name__ == "__main__":

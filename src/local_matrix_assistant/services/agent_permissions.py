@@ -6,9 +6,10 @@ import os
 from pathlib import Path
 
 
-STANDARD_ACCESS = "standard"
+CREATE_ONLY_ACCESS = "create_only"
 READ_ONLY_ACCESS = "read_only"
-VALID_ACCESS_MODES = frozenset({STANDARD_ACCESS, READ_ONLY_ACCESS})
+VALID_ACCESS_MODES = frozenset({CREATE_ONLY_ACCESS, READ_ONLY_ACCESS})
+_LEGACY_STANDARD_ACCESS = "standard"
 
 
 class AgentPermissionStore:
@@ -22,7 +23,7 @@ class AgentPermissionStore:
         self._entries, self._fail_closed = self._load()
 
     def mode_for(self, workspace: Path | str) -> str:
-        fallback = READ_ONLY_ACCESS if self._fail_closed else STANDARD_ACCESS
+        fallback = READ_ONLY_ACCESS if self._fail_closed else CREATE_ONLY_ACCESS
         return self._entries.get(self._key(workspace), fallback)
 
     def set_mode(self, workspace: Path | str, mode: str) -> None:
@@ -32,7 +33,7 @@ class AgentPermissionStore:
         key = self._key(workspace)
         previous = dict(self._entries)
         previous_fail_closed = self._fail_closed
-        if normalized == STANDARD_ACCESS:
+        if normalized == CREATE_ONLY_ACCESS:
             self._entries.pop(key, None)
         else:
             self._entries[key] = normalized
@@ -66,6 +67,8 @@ class AgentPermissionStore:
                 continue
             path = record.get("path")
             mode = record.get("mode")
+            if mode == _LEGACY_STANDARD_ACCESS:
+                mode = CREATE_ONLY_ACCESS
             if not isinstance(path, str) or not path.strip() or mode not in VALID_ACCESS_MODES:
                 malformed = True
                 continue

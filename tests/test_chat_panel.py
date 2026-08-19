@@ -13,8 +13,8 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QMimeData, QUrl
-from PySide6.QtGui import QColor, QImage
+from PySide6.QtCore import QByteArray, QBuffer, QCoreApplication, QIODevice, QMimeData, QPoint, QPointF, QUrl
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage
 from PySide6.QtWidgets import QApplication, QLabel
 from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
@@ -150,6 +150,35 @@ class ChatPanelTests(unittest.TestCase):
         mime_data.setUrls([QUrl.fromLocalFile("C:/work/example.py"), QUrl("https://example.com")])
 
         self.assertEqual(["C:/work/example.py"], self.panel.input_box._local_file_paths(mime_data))
+        self.assertTrue(self.panel.composer_panel.acceptDrops())
+
+    def test_drop_over_chat_scroll_reaches_page_file_handler(self) -> None:
+        mime_data = QMimeData()
+        mime_data.setUrls([QUrl.fromLocalFile("C:/work/example.py")])
+        dropped: list[list[str]] = []
+        self.panel.file_paths_dropped.connect(dropped.append)
+        target = self.panel.chat_scroll.viewport()
+        drag_event = QDragEnterEvent(
+            QPoint(5, 5),
+            Qt.DropAction.CopyAction,
+            mime_data,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        drop_event = QDropEvent(
+            QPointF(5, 5),
+            Qt.DropAction.CopyAction,
+            mime_data,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        QCoreApplication.sendEvent(target, drag_event)
+        QCoreApplication.sendEvent(target, drop_event)
+
+        self.assertTrue(drag_event.isAccepted())
+        self.assertTrue(drop_event.isAccepted())
+        self.assertEqual([["C:/work/example.py"]], dropped)
 
     def test_message_input_emits_clipboard_image_without_inserting_text(self) -> None:
         image = QImage(24, 16, QImage.Format.Format_RGB32)

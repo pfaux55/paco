@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QSize
-from PySide6.QtGui import QColor, QIcon, QPainter, QPainterPath, QPixmap
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -14,7 +15,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from local_matrix_assistant.core.config import AppConfig
+from local_matrix_assistant.core.config import (
+    AppConfig,
+    MAX_CHAT_FONT_SIZE,
+    MIN_CHAT_FONT_SIZE,
+)
 from local_matrix_assistant.core.model_catalog import RECOMMENDED_MODELS, RecommendedModel
 from local_matrix_assistant.core.models import ModelPullProgress
 from local_matrix_assistant.ui.inputs import NoWheelComboBox
@@ -25,54 +30,144 @@ from local_matrix_assistant.ui.status_panel import StatusPanel
 class SettingsPanel(QWidget):
     def __init__(self, config: AppConfig) -> None:
         super().__init__()
+        self.setObjectName("settingsPage")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setSpacing(12)
 
         settings_scroll = QScrollArea()
+        settings_scroll.setObjectName("settingsScroll")
         settings_scroll.setWidgetResizable(True)
         settings_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        settings_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
 
         settings_container = QWidget()
+        settings_container.setObjectName("settingsSurface")
         settings_scroll.setWidget(settings_container)
 
-        panel = QFrame()
-        panel.setObjectName("panel")
-        panel_layout = QVBoxLayout(panel)
-        panel_layout.setContentsMargins(18, 18, 18, 18)
+        panel_layout = QVBoxLayout(settings_container)
+        panel_layout.setContentsMargins(22, 18, 22, 22)
         panel_layout.setSpacing(14)
 
-        settings_header = QLabel("System Controls")
-        settings_header.setObjectName("messageRole")
-        panel_layout.addWidget(settings_header)
+        appearance_card, appearance_layout = self._settings_card(
+            "Appearance",
+            "Choose how conversations and text entry look across every mode.",
+        )
+        appearance_grid = QGridLayout()
+        appearance_grid.setContentsMargins(0, 2, 0, 0)
+        appearance_grid.setHorizontalSpacing(16)
+        appearance_grid.setVerticalSpacing(10)
+        appearance_grid.setColumnStretch(0, 1)
+        appearance_grid.setColumnStretch(1, 1)
 
         self.theme_combo = NoWheelComboBox()
+        self.theme_combo.setObjectName("settingsControl")
         for theme_id, theme_name in THEME_OPTIONS:
             self.theme_combo.addItem(self._theme_preview_icon(theme_id), theme_name, theme_id)
-        self.theme_combo.setIconSize(QSize(18, 18))
+        self.theme_combo.setIconSize(QSize(20, 20))
         self.theme_combo.setCurrentIndex(
             max(0, self.theme_combo.findData(config.theme))
         )
-        panel_layout.addWidget(QLabel("App Theme"))
-        panel_layout.addWidget(self.theme_combo)
-        theme_note = QLabel("Changes the app colour immediately and is remembered for future launches.")
-        theme_note.setObjectName("statusLabel")
-        theme_note.setWordWrap(True)
-        panel_layout.addWidget(theme_note)
+        appearance_grid.addWidget(
+            self._field(
+                "Color theme",
+                self.theme_combo,
+                "Applied instantly and remembered for future launches.",
+            ),
+            0,
+            0,
+        )
+
+        font_controls = QWidget()
+        font_controls.setObjectName("settingsControlGroup")
+        font_row = QHBoxLayout()
+        font_row.setContentsMargins(0, 0, 0, 0)
+        font_row.setSpacing(8)
+        font_controls.setLayout(font_row)
+        self.font_family_combo = NoWheelComboBox()
+        self.font_family_combo.setObjectName("settingsControl")
+        self.font_family_combo.setEditable(False)
+        font_families = QFontDatabase.families()
+        if config.chat_font_family not in font_families:
+            font_families.insert(0, config.chat_font_family)
+        for family in font_families:
+            self.font_family_combo.addItem(family)
+            self.font_family_combo.setItemData(
+                self.font_family_combo.count() - 1,
+                QFont(family),
+                Qt.ItemDataRole.FontRole,
+            )
+        family_index = self.font_family_combo.findText(config.chat_font_family)
+        if family_index < 0:
+            fallback_family = QFontDatabase.systemFont(
+                QFontDatabase.SystemFont.GeneralFont
+            ).family()
+            family_index = self.font_family_combo.findText(fallback_family)
+        self.font_family_combo.setCurrentIndex(max(0, family_index))
+        self.font_family_combo.setAccessibleName("Chat font family")
+        self.font_size_combo = NoWheelComboBox()
+        self.font_size_combo.setObjectName("settingsControl")
+        self.font_size_combo.setEditable(False)
+        for size in range(MIN_CHAT_FONT_SIZE, MAX_CHAT_FONT_SIZE + 1):
+            self.font_size_combo.addItem(f"{size} pt", size)
+        self.font_size_combo.setCurrentIndex(
+            max(0, self.font_size_combo.findData(config.chat_font_size))
+        )
+        self.font_size_combo.setAccessibleName("Chat font size")
+        self.font_size_combo.setFixedWidth(92)
+        font_row.addWidget(self.font_family_combo, 1)
+        font_row.addWidget(self.font_size_combo)
+        appearance_grid.addWidget(
+            self._field(
+                "Chat and input font",
+                font_controls,
+                "Used for messages, text boxes, and compact mode.",
+            ),
+            0,
+            1,
+        )
+        appearance_layout.addLayout(appearance_grid)
+        panel_layout.addWidget(appearance_card)
+
+        model_card, model_layout = self._settings_card(
+            "Local AI",
+            "Connect to Ollama, select a fallback model, or install one locally.",
+        )
+        model_grid = QGridLayout()
+        model_grid.setContentsMargins(0, 2, 0, 0)
+        model_grid.setHorizontalSpacing(16)
+        model_grid.setVerticalSpacing(10)
+        model_grid.setColumnStretch(0, 1)
+        model_grid.setColumnStretch(1, 1)
 
         self.ollama_host_input = QLineEdit(config.ollama_base_url)
+        self.ollama_host_input.setObjectName("settingsControl")
         self.ollama_host_input.setPlaceholderText("Ollama base URL")
-        panel_layout.addWidget(QLabel("Ollama Host"))
-        panel_layout.addWidget(self.ollama_host_input)
+        model_grid.addWidget(
+            self._field(
+                "Ollama endpoint",
+                self.ollama_host_input,
+                "Local service address. The default uses this computer only.",
+            ),
+            0,
+            0,
+        )
 
         self.model_combo = NoWheelComboBox()
+        self.model_combo.setObjectName("settingsControl")
         self.model_combo.setEditable(False)
-        panel_layout.addWidget(QLabel("Ollama Model"))
-        panel_layout.addWidget(self.model_combo)
-        model_note = QLabel("Used by Manual mode and as a fallback. Choose task routing from the Chat composer.")
-        model_note.setObjectName("statusLabel")
-        model_note.setWordWrap(True)
-        panel_layout.addWidget(model_note)
+        model_grid.addWidget(
+            self._field(
+                "Fallback model",
+                self.model_combo,
+                "Used by Manual routing and when no task-specific model matches.",
+            ),
+            0,
+            1,
+        )
+        model_layout.addLayout(model_grid)
 
         self._installed_models: set[str] = set()
         self._model_install_busy = False
@@ -80,31 +175,40 @@ class SettingsPanel(QWidget):
         model_install_card = QFrame()
         model_install_card.setObjectName("modelInstallCard")
         model_install_layout = QVBoxLayout(model_install_card)
-        model_install_layout.setContentsMargins(14, 14, 14, 14)
-        model_install_layout.setSpacing(9)
+        model_install_layout.setContentsMargins(16, 15, 16, 15)
+        model_install_layout.setSpacing(10)
 
-        model_install_heading = QLabel("Install a Local Model")
-        model_install_heading.setObjectName("messageRole")
-        model_install_layout.addWidget(model_install_heading)
+        install_header = QHBoxLayout()
+        install_header.setSpacing(8)
+        model_install_heading = QLabel("Add a local model")
+        model_install_heading.setObjectName("settingsInsetTitle")
+        install_header.addWidget(model_install_heading)
+        install_header.addStretch(1)
+        local_badge = QLabel("LOCAL")
+        local_badge.setObjectName("settingsLocalBadge")
+        install_header.addWidget(local_badge)
+        model_install_layout.addLayout(install_header)
         model_install_note = QLabel(
-            "Downloads are stored and managed by Ollama. Model sizes are approximate."
+            "Downloads stay on this device and are managed by Ollama."
         )
-        model_install_note.setObjectName("statusLabel")
+        model_install_note.setObjectName("settingsFieldHelp")
         model_install_note.setWordWrap(True)
         model_install_layout.addWidget(model_install_note)
 
         self.model_install_combo = NoWheelComboBox()
+        self.model_install_combo.setObjectName("settingsControl")
         for model in RECOMMENDED_MODELS:
             self.model_install_combo.addItem(model.display_name, model.name)
         model_install_layout.addWidget(self.model_install_combo)
 
         self.model_install_details = QLabel()
-        self.model_install_details.setObjectName("statusLabel")
+        self.model_install_details.setObjectName("settingsModelDetails")
         self.model_install_details.setWordWrap(True)
         model_install_layout.addWidget(self.model_install_details)
 
         model_install_controls = QHBoxLayout()
         self.model_install_button = QPushButton("Install")
+        self.model_install_button.setObjectName("modelInstallButton")
         self.model_cancel_button = QPushButton("Cancel")
         self.model_cancel_button.setObjectName("secondaryButton")
         self.model_cancel_button.hide()
@@ -120,43 +224,114 @@ class SettingsPanel(QWidget):
         model_install_layout.addWidget(self.model_install_progress)
 
         self.model_install_status = QLabel("Choose a recommended model to install.")
-        self.model_install_status.setObjectName("statusLabel")
+        self.model_install_status.setObjectName("settingsInstallStatus")
         self.model_install_status.setWordWrap(True)
         model_install_layout.addWidget(self.model_install_status)
-        panel_layout.addWidget(model_install_card)
+        model_layout.addWidget(model_install_card)
+        panel_layout.addWidget(model_card)
 
         self.model_install_combo.currentIndexChanged.connect(
             self._on_model_install_selection_changed
         )
         self._update_model_install_details()
 
+        voice_card, voice_layout = self._settings_card(
+            "Voice runtime",
+            "Point Paco to local speech recognition and speech synthesis files.",
+        )
+
         self.stt_path_input = QLineEdit(config.stt_model_dir)
-        panel_layout.addWidget(QLabel("STT Model Directory"))
-        panel_layout.addWidget(self.stt_path_input)
+        self.stt_path_input.setObjectName("settingsControl")
+        voice_layout.addWidget(
+            self._field(
+                "Speech recognition directory",
+                self.stt_path_input,
+                "Vosk model folder used for local transcription.",
+            )
+        )
 
         self.tts_model_input = QLineEdit(config.tts_model_path)
-        panel_layout.addWidget(QLabel("TTS Model File"))
-        panel_layout.addWidget(self.tts_model_input)
+        self.tts_model_input.setObjectName("settingsControl")
+        voice_layout.addWidget(
+            self._field(
+                "Speech synthesis model",
+                self.tts_model_input,
+                "Piper ONNX voice model used for local playback.",
+            )
+        )
 
         self.tts_config_input = QLineEdit(config.tts_config_path)
-        panel_layout.addWidget(QLabel("TTS Config File"))
-        panel_layout.addWidget(self.tts_config_input)
-
-        control_row = QHBoxLayout()
-        self.refresh_button = QPushButton("Refresh Status")
-        self.save_button = QPushButton("Save Settings")
-        control_row.addWidget(self.refresh_button)
-        control_row.addWidget(self.save_button)
-        panel_layout.addLayout(control_row)
-
-        self.status_panel = StatusPanel()
-        panel_layout.addWidget(self.status_panel)
+        self.tts_config_input.setObjectName("settingsControl")
+        voice_layout.addWidget(
+            self._field(
+                "Speech synthesis configuration",
+                self.tts_config_input,
+                "JSON configuration paired with the Piper model.",
+            )
+        )
+        panel_layout.addWidget(voice_card)
         panel_layout.addStretch(1)
 
-        settings_container_layout = QVBoxLayout(settings_container)
-        settings_container_layout.setContentsMargins(0, 0, 0, 0)
-        settings_container_layout.addWidget(panel)
-        layout.addWidget(settings_scroll)
+        layout.addWidget(settings_scroll, 1)
+
+        action_bar = QFrame()
+        action_bar.setObjectName("settingsActionBar")
+        action_bar.setAccessibleName("Settings actions")
+        control_row = QHBoxLayout()
+        control_row.setContentsMargins(16, 12, 16, 12)
+        control_row.setSpacing(10)
+        action_bar.setLayout(control_row)
+        self.status_panel = StatusPanel()
+        self.status_panel.setObjectName("settingsStatus")
+        control_row.addWidget(self.status_panel, 1)
+        self.refresh_button = QPushButton("Refresh Status")
+        self.refresh_button.setObjectName("secondaryButton")
+        self.save_button = QPushButton("Save Settings")
+        self.save_button.setObjectName("primaryButton")
+        control_row.addWidget(self.refresh_button, 0)
+        control_row.addWidget(self.save_button)
+        layout.addWidget(action_bar)
+
+    @staticmethod
+    def _settings_card(
+        title: str,
+        description: str,
+    ) -> tuple[QFrame, QVBoxLayout]:
+        card = QFrame()
+        card.setObjectName("settingsCard")
+        card.setAccessibleName(f"{title} settings")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(18, 17, 18, 18)
+        card_layout.setSpacing(13)
+
+        copy = QVBoxLayout()
+        copy.setSpacing(2)
+        heading = QLabel(title)
+        heading.setObjectName("settingsSectionTitle")
+        copy.addWidget(heading)
+        note = QLabel(description)
+        note.setObjectName("settingsSectionDescription")
+        note.setWordWrap(True)
+        copy.addWidget(note)
+        card_layout.addLayout(copy)
+        return card, card_layout
+
+    @staticmethod
+    def _field(label_text: str, control: QWidget, help_text: str) -> QWidget:
+        field = QWidget()
+        field.setObjectName("settingsField")
+        field_layout = QVBoxLayout(field)
+        field_layout.setContentsMargins(0, 0, 0, 0)
+        field_layout.setSpacing(6)
+        label = QLabel(label_text)
+        label.setObjectName("settingsFieldLabel")
+        field_layout.addWidget(label)
+        field_layout.addWidget(control)
+        help_label = QLabel(help_text)
+        help_label.setObjectName("settingsFieldHelp")
+        help_label.setWordWrap(True)
+        field_layout.addWidget(help_label)
+        return field
 
     @staticmethod
     def _theme_preview_icon(theme_id: str) -> QIcon:

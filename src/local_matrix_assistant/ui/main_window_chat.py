@@ -890,36 +890,7 @@ class ChatWindowMixin:
         pending: list[LocalAttachment],
         paths: list[str],
     ) -> tuple[list[LocalAttachment], int, list[str]]:
-        pending = list(pending)
-        existing = {os.path.normcase(os.path.abspath(item.path)) for item in pending}
-        remaining_characters = service.max_total_content_characters - sum(
-            len(item.content) for item in pending
-        )
-        image_count = sum(bool(item.image_data) for item in pending)
-        errors: list[str] = []
-        added = 0
-        for raw_path in paths:
-            normalized = os.path.normcase(os.path.abspath(os.path.expanduser(raw_path)))
-            if normalized in existing:
-                errors.append(f"{Path(raw_path).name}: already attached")
-                continue
-            if len(pending) >= service.max_files:
-                errors.append(f"Only {service.max_files} files can be attached at once")
-                break
-            try:
-                attachment = service.load(raw_path, available_characters=remaining_characters)
-            except AttachmentError as exc:
-                errors.append(str(exc))
-                continue
-            if attachment.image_data and image_count >= service.max_images:
-                errors.append(f"Only {service.max_images} images can be attached at once")
-                continue
-            pending.append(attachment)
-            existing.add(normalized)
-            remaining_characters -= len(attachment.content)
-            image_count += bool(attachment.image_data)
-            added += 1
-        return pending, added, errors
+        return service.load_batch(pending, paths)
 
     def _on_chat_attachments_loaded(self, conversation_id: str, payload: object) -> None:
         self._set_interaction_busy(False)
@@ -1315,7 +1286,12 @@ class ChatWindowMixin:
                 "web_search_used": True,
                 "web_search_provider": search_response.provider,
                 "web_sources": [
-                    {"title": result.title, "url": result.url, "snippet": result.snippet}
+                    {
+                        "title": result.title,
+                        "url": result.url,
+                        "snippet": result.snippet,
+                        "provider": result.provider,
+                    }
                     for result in search_response.results
                 ],
             })

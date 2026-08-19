@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import base64
+import binascii
 from dataclasses import replace
 from datetime import datetime
 import os
+from pathlib import Path
 import re
 import time
 import uuid
 
 from PySide6.QtCore import QSignalBlocker, QTimer, Qt, Signal
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -26,13 +29,14 @@ from PySide6.QtWidgets import (
 )
 
 from local_matrix_assistant.core.constants import MIN_COMPOSER_HEIGHT
-from local_matrix_assistant.services.agent_permissions import READ_ONLY_ACCESS, STANDARD_ACCESS
+from local_matrix_assistant.services.agent_permissions import CREATE_ONLY_ACCESS, READ_ONLY_ACCESS
+from local_matrix_assistant.services.attachments import AttachmentService, LocalAttachment
 from local_matrix_assistant.services.agent_history import (
     AgentHistoryEvent,
     AgentHistoryRecord,
     AgentTaskDetail,
 )
-from local_matrix_assistant.ui.chat_panel import MessageInput
+from local_matrix_assistant.ui.chat_panel import FileDropFrame, FileDropTargetMixin, MessageInput
 from local_matrix_assistant.ui.agent_timeline import AgentEventCard, AgentTimeline
 from local_matrix_assistant.ui.agent_progress import AgentProgressCard
 from local_matrix_assistant.ui.brand import paco_mark
@@ -40,7 +44,7 @@ from local_matrix_assistant.ui.diff_review import DiffReviewWidget
 from local_matrix_assistant.ui.status_panel import StatusPanel
 
 
-class AgentPanel(QWidget):
+class AgentPanel(FileDropTargetMixin, QWidget):
     max_execution_characters = 200_000
     max_task_detail_characters = 60_000
     max_task_detail_total_characters = 200_000
@@ -75,9 +79,12 @@ class AgentPanel(QWidget):
     history_clear_confirmation_changed = Signal(bool)
     history_cleared = Signal()
     save_task_output_requested = Signal(str, str)
+    file_paths_dropped = Signal(list)
+    attachment_remove_requested = Signal(str)
 
     def __init__(self, active_folder: str, workspace_scope: str = "") -> None:
         super().__init__()
+        self.setAcceptDrops(True)
         self._busy = False
         self._task_running = False
         self._reviewable_diff = False
@@ -123,8 +130,8 @@ class AgentPanel(QWidget):
         panel_layout.addLayout(header_layout)
 
         description = QLabel(
-            "Ask naturally, continue the conversation, inspect or change the selected workspace, create files, "
-            "run project tasks, or open apps. Writes remain reviewable and project scripts require approval."
+            "Ask naturally, inspect the selected workspace, create new files, or open apps. Existing files "
+            "cannot be edited, replaced, or deleted, and project execution is blocked."
         )
         description.setObjectName("subtitle")
         description.setWordWrap(True)
@@ -150,7 +157,7 @@ class AgentPanel(QWidget):
         self.permission_mode_combo = QComboBox()
         self.permission_mode_combo.setObjectName("agentPermissionMode")
         self.permission_mode_combo.setAccessibleName("Agent workspace access mode")
-        self.permission_mode_combo.addItem("Standard access", STANDARD_ACCESS)
+        self.permission_mode_combo.addItem("Create-only", CREATE_ONLY_ACCESS)
         self.permission_mode_combo.addItem("Read-only", READ_ONLY_ACCESS)
         self.permission_mode_combo.setMinimumContentsLength(13)
         self.permission_mode_combo.setSizeAdjustPolicy(
@@ -376,15 +383,74 @@ class AgentPanel(QWidget):
         self.script_approval_panel.setVisible(False)
         panel_layout.addWidget(self.script_approval_panel)
 
-        command_panel = QFrame()
-        command_panel.setObjectName("composerDock")
-        command_layout = QVBoxLayout(command_panel)
+        self.command_panel = FileDropFrame()
+        self.command_panel.setObjectName("composerDock")
+        command_layout = QVBoxLayout(self.command_panel)
         command_layout.setContentsMargins(16, 16, 16, 14)
         command_layout.setSpacing(10)
 
+        self.attachment_tray = QFrame()
+        self.attachment_tray.setObjectName("attachmentTray")
+        attachment_layout = QVBoxLayout(self.attachment_tray)
+        attachment_layout.setContentsMargins(12, 10, 12, 10)
+        attachment_layout.setSpacing(6)
+        attachment_heading = QLabel("AGENT FILES · LOCAL SNAPSHOTS")
+        attachment_heading.setObjectName("attachmentHeading")
+        attachment_layout.addWidget(attachment_heading)
+        self.attachment_items_host = QWidget()
+        self.attachment_items_host.setObjectName("attachmentItemsHost")
+        self.attachment_items_layout = QVBoxLayout(self.attachment_items_host)
+        self.attachment_items_layout.setContentsMargins(0, 0, 0, 0)
+        self.attachment_items_layout.setSpacing(5)
+        self.attachment_scroll = QScrollArea()
+        self.attachment_scroll.setObjectName("attachmentScroll")
+        self.attachment_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.attachment_scroll.setWidgetResizable(True)
+        self.attachment_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.attachment_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.attachment_scroll.setWidget(self.attachment_items_host)
+        attachment_layout.addWidget(self.attachment_scroll)
+        self._attachment_rows: list[tuple[QFrame, QLabel, QLabel, QPushButton]] = []
+        for index in range(AttachmentService.max_files):
+            row = QFrame()
+            row.setObjectName("attachmentChip")
+            row_layout = QHBoxLayout(row)
+            row_layout.setContentsMargins(10, 5, 6, 5)
+            row_layout.setSpacing(8)
+            preview = QLabel("")
+            preview.setObjectName("attachmentThumbnail")
+            preview.setFixedSize(34, 34)
+            preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            preview.setVisible(False)
+            row_layout.addWidget(preview)
+            label = QLabel("")
+            label.setObjectName("attachmentName")
+            row_layout.addWidget(label, stretch=1)
+            remove_button = QPushButton("×")
+            remove_button.setObjectName("attachmentRemoveButton")
+            remove_button.setFixedSize(26, 26)
+            remove_button.clicked.connect(
+                lambda _checked=False, item_index=index: self._request_attachment_remove(item_index)
+            )
+            row_layout.addWidget(remove_button)
+            row.setVisible(False)
+            self.attachment_items_layout.addWidget(row)
+            self._attachment_rows.append((row, preview, label, remove_button))
+        self.attachment_tray.setVisible(False)
+        command_layout.addWidget(self.attachment_tray)
+
         input_row = QHBoxLayout()
+        input_row.setSpacing(12)
+        self.attach_button = QPushButton("+ File")
+        self.attach_button.setObjectName("attachmentButton")
+        self.attach_button.setToolTip("Attach local documents, code, PDFs, or images")
+        self.attach_button.setAccessibleName("Attach files to Agent")
+        self.attach_button.setFixedWidth(72)
+        input_row.addWidget(self.attach_button, alignment=Qt.AlignmentFlag.AlignBottom)
         self.command_input = MessageInput()
-        self.command_input.setPlaceholderText("Tell Agent what you need. Enter sends; Shift+Enter adds a new line.")
+        self.command_input.setPlaceholderText(
+            "Tell Agent what you need or drop files here. Enter sends; Shift+Enter adds a new line."
+        )
         self.command_input.setMinimumHeight(MIN_COMPOSER_HEIGHT)
         self.command_input.setMaximumHeight(130)
         self.command_input.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -396,7 +462,7 @@ class AgentPanel(QWidget):
 
         self.status_panel = StatusPanel()
         command_layout.addWidget(self.status_panel)
-        panel_layout.addWidget(command_panel)
+        panel_layout.addWidget(self.command_panel)
         self.panel_scroll = QScrollArea()
         self.panel_scroll.setObjectName("agentPanelScroll")
         self.panel_scroll.setWidgetResizable(True)
@@ -405,6 +471,7 @@ class AgentPanel(QWidget):
         layout.addWidget(self.panel_scroll)
 
         self.command_input.textChanged.connect(self._sync_run_state)
+        self._pending_attachments: list[LocalAttachment] = []
         self.apply_edit_button.clicked.connect(self.apply_edit_requested)
         self.apply_and_test_button.clicked.connect(self.apply_and_test_requested)
         self.discard_edit_button.clicked.connect(self.discard_edit_requested)
@@ -429,7 +496,7 @@ class AgentPanel(QWidget):
             self._apply_timeline_filter(show_timeline=False)
 
     def set_permission_mode(self, mode: str) -> None:
-        normalized = READ_ONLY_ACCESS if mode == READ_ONLY_ACCESS else STANDARD_ACCESS
+        normalized = READ_ONLY_ACCESS if mode == READ_ONLY_ACCESS else CREATE_ONLY_ACCESS
         index = self.permission_mode_combo.findData(normalized)
         with QSignalBlocker(self.permission_mode_combo):
             self.permission_mode_combo.setCurrentIndex(max(0, index))
@@ -438,7 +505,7 @@ class AgentPanel(QWidget):
         self.permission_mode_combo.setToolTip(
             "Agent may inspect this workspace, but file writes and executable project tasks are blocked."
             if read_only
-            else "Explicit file creation and reviewed edits are allowed; project scripts still require approval."
+            else "Agent may inspect this workspace and create new files. Editing, replacing, deleting, and executable project tasks are blocked."
         )
         self.permission_mode_combo.style().unpolish(self.permission_mode_combo)
         self.permission_mode_combo.style().polish(self.permission_mode_combo)
@@ -586,6 +653,66 @@ class AgentPanel(QWidget):
             self.command_input.clear()
         return text
 
+    def set_pending_attachments(self, attachments: list[LocalAttachment]) -> None:
+        self._pending_attachments = list(attachments)
+        for index, (row, preview, label, remove_button) in enumerate(self._attachment_rows):
+            if index >= len(attachments):
+                row.setVisible(False)
+                preview.clear()
+                preview.setVisible(False)
+                label.clear()
+                continue
+            attachment = attachments[index]
+            thumbnail = self._decode_thumbnail(attachment.thumbnail_data or attachment.image_data)
+            preview.setPixmap(thumbnail) if not thumbnail.isNull() else preview.clear()
+            preview.setVisible(not thumbnail.isNull())
+            state = " · truncated" if attachment.truncated else ""
+            kind = "Image" if attachment.image_data else attachment.kind.title()
+            label.setText(
+                f"{attachment.name} · {kind} · "
+                f"{AttachmentService.format_size(attachment.size_bytes)}{state}"
+            )
+            label.setToolTip(
+                attachment.path if Path(attachment.path).is_absolute() else "Stored local snapshot"
+            )
+            remove_button.setToolTip(f"Remove {attachment.name}")
+            remove_button.setAccessibleName(f"Remove Agent file {attachment.name}")
+            row.setVisible(True)
+        self.attachment_tray.setVisible(bool(attachments))
+        row_height = 47 if any(item.image_data for item in attachments) else 37
+        self.attachment_scroll.setFixedHeight(min(106, max(36, len(attachments) * row_height)))
+        self._sync_run_state()
+
+    def attachment_count(self) -> int:
+        return len(self._pending_attachments)
+
+    def set_attachment_controls_enabled(self, enabled: bool) -> None:
+        self.attach_button.setEnabled(enabled)
+        for _row, _preview, _label, remove_button in self._attachment_rows:
+            remove_button.setEnabled(enabled)
+
+    def _request_attachment_remove(self, index: int) -> None:
+        if 0 <= index < len(self._pending_attachments):
+            self.attachment_remove_requested.emit(self._pending_attachments[index].path)
+
+    @staticmethod
+    def _decode_thumbnail(encoded: str) -> QPixmap:
+        if not encoded:
+            return QPixmap()
+        try:
+            payload = base64.b64decode(encoded, validate=True)
+        except (ValueError, binascii.Error):
+            return QPixmap()
+        pixmap = QPixmap()
+        if not pixmap.loadFromData(payload):
+            return QPixmap()
+        return pixmap.scaled(
+            34,
+            34,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+
     def recall_command(self, command: str, workspace_path: str = "") -> None:
         text = command.strip()
         if not text or self._busy or self._script_approval_pending:
@@ -624,6 +751,7 @@ class AgentPanel(QWidget):
         self.run_script_button.setEnabled(self._script_approval_pending and not busy)
         self.reject_script_button.setEnabled(self._script_approval_pending and not busy)
         self.permission_mode_combo.setEnabled(not busy)
+        self.set_attachment_controls_enabled(not busy)
         self._sync_output_actions()
         self._sync_command_recall_state()
         self._sync_clear_state()
@@ -799,7 +927,7 @@ class AgentPanel(QWidget):
         self.run_button.setEnabled(
             not self._busy
             and not self._script_approval_pending
-            and bool(self.command_input.toPlainText().strip())
+            and (bool(self.command_input.toPlainText().strip()) or bool(self._pending_attachments))
         )
 
     def _sync_clear_state(self) -> None:
@@ -1036,6 +1164,6 @@ class AgentPanel(QWidget):
         self._update_active_task_duration(refresh=True)
 
     def _emit_permission_mode(self) -> None:
-        mode = str(self.permission_mode_combo.currentData() or STANDARD_ACCESS)
+        mode = str(self.permission_mode_combo.currentData() or CREATE_ONLY_ACCESS)
         self.set_permission_mode(mode)
         self.permission_mode_changed.emit(mode)

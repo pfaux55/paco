@@ -13,12 +13,17 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QCoreApplication, QMimeData, QPoint, QPointF, Qt, QUrl
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from local_matrix_assistant.ui.agent_panel import AgentPanel
-from local_matrix_assistant.services.agent_permissions import READ_ONLY_ACCESS, STANDARD_ACCESS
+from local_matrix_assistant.services.agent_permissions import (
+    CREATE_ONLY_ACCESS,
+    READ_ONLY_ACCESS,
+)
+from local_matrix_assistant.services.attachments import LocalAttachment
 from local_matrix_assistant.services.agent_history import (
     AgentHistoryEvent,
     AgentHistoryRecord,
@@ -50,11 +55,67 @@ class AgentPanelTests(unittest.TestCase):
         self.panel.set_busy(True)
         self.assertFalse(self.panel.run_button.isEnabled())
 
+    def test_agent_file_enables_send_and_can_be_removed(self) -> None:
+        attachment = LocalAttachment(
+            path=r"D:\outside\requirements.txt",
+            name="requirements.txt",
+            size_bytes=18,
+            content="PySide6==6.8.0",
+        )
+        removed: list[str] = []
+        self.panel.attachment_remove_requested.connect(removed.append)
+
+        self.panel.set_pending_attachments([attachment])
+
+        self.assertEqual(1, self.panel.attachment_count())
+        self.assertFalse(self.panel.attachment_tray.isHidden())
+        self.assertTrue(self.panel.run_button.isEnabled())
+        self.panel._attachment_rows[0][3].click()
+        self.assertEqual([attachment.path], removed)
+
+        self.panel.set_pending_attachments([])
+        self.assertTrue(self.panel.attachment_tray.isHidden())
+        self.assertFalse(self.panel.run_button.isEnabled())
+
+    def test_agent_composer_accepts_file_drops(self) -> None:
+        self.assertTrue(self.panel.command_panel.acceptDrops())
+        self.assertIn("drop files", self.panel.command_input.placeholderText())
+
+    def test_drop_over_agent_log_reaches_page_file_handler(self) -> None:
+        mime_data = QMimeData()
+        mime_data.setUrls([QUrl.fromLocalFile("C:/work/example.py")])
+        dropped: list[list[str]] = []
+        self.panel.file_paths_dropped.connect(dropped.append)
+        target = self.panel.action_log.viewport()
+        drag_event = QDragEnterEvent(
+            QPoint(5, 5),
+            Qt.DropAction.CopyAction,
+            mime_data,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        drop_event = QDropEvent(
+            QPointF(5, 5),
+            Qt.DropAction.CopyAction,
+            mime_data,
+            Qt.MouseButton.LeftButton,
+            Qt.KeyboardModifier.NoModifier,
+        )
+
+        QCoreApplication.sendEvent(target, drag_event)
+        QCoreApplication.sendEvent(target, drop_event)
+
+        self.assertTrue(drag_event.isAccepted())
+        self.assertTrue(drop_event.isAccepted())
+        self.assertEqual([["C:/work/example.py"]], dropped)
+
     def test_workspace_access_control_is_clear_persistent_ready_and_busy_safe(self) -> None:
         changes: list[str] = []
         self.panel.permission_mode_changed.connect(changes.append)
 
-        self.assertEqual(STANDARD_ACCESS, self.panel.permission_mode_combo.currentData())
+        self.assertEqual("Create-only", self.panel.permission_mode_combo.itemText(0))
+        self.assertEqual(CREATE_ONLY_ACCESS, self.panel.permission_mode_combo.itemData(0))
+        self.assertEqual(CREATE_ONLY_ACCESS, self.panel.permission_mode_combo.currentData())
         read_only_index = self.panel.permission_mode_combo.findData(READ_ONLY_ACCESS)
         self.panel.permission_mode_combo.setCurrentIndex(read_only_index)
 

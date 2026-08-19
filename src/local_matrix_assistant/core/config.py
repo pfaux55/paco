@@ -15,6 +15,10 @@ from pathlib import Path
 MAX_CHAT_DRAFTS = 20
 MAX_CHAT_DRAFT_CHARACTERS = 20_000
 MAX_CHAT_DRAFT_TOTAL_CHARACTERS = 100_000
+DEFAULT_CHAT_FONT_FAMILY = "Consolas"
+DEFAULT_CHAT_FONT_SIZE = 10
+MIN_CHAT_FONT_SIZE = 8
+MAX_CHAT_FONT_SIZE = 32
 _CONVERSATION_ID_PATTERN = re.compile(r"[0-9a-f]{32}", re.IGNORECASE)
 
 
@@ -186,6 +190,10 @@ def _coerce_ui_preferences(data: dict) -> None:
         "red",
     } else "matrix"
     data["sidebar_collapsed"] = data.get("sidebar_collapsed") is True
+    data["chat_font_family"] = normalize_chat_font_family(
+        data.get("chat_font_family")
+    )
+    data["chat_font_size"] = normalize_chat_font_size(data.get("chat_font_size"))
     data["continuous_voice_enabled"] = data.get("continuous_voice_enabled") is True
     active_page = data.get("active_page")
     data["active_page"] = (
@@ -231,6 +239,30 @@ def _coerce_ui_preferences(data: dict) -> None:
     if data["continuous_voice_enabled"]:
         data["voice_enabled"] = True
         data["auto_speak_responses"] = True
+
+
+def normalize_chat_font_family(value: object) -> str:
+    if not isinstance(value, str):
+        return DEFAULT_CHAT_FONT_FAMILY
+    family = value.strip()
+    if (
+        not family
+        or len(family) > 100
+        or any(
+            ord(character) < 32 or character in {'"', "\\", ";", "{", "}"}
+            for character in family
+        )
+    ):
+        return DEFAULT_CHAT_FONT_FAMILY
+    return family
+
+
+def normalize_chat_font_size(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return DEFAULT_CHAT_FONT_SIZE
+    if not math.isfinite(float(value)):
+        return DEFAULT_CHAT_FONT_SIZE
+    return min(MAX_CHAT_FONT_SIZE, max(MIN_CHAT_FONT_SIZE, round(value)))
 
 
 @dataclass(slots=True)
@@ -295,6 +327,8 @@ class AppConfig:
     last_conversation_id: str = ""
     chat_drafts: dict[str, str] = field(default_factory=dict)
     theme: str = "matrix"
+    chat_font_family: str = DEFAULT_CHAT_FONT_FAMILY
+    chat_font_size: int = DEFAULT_CHAT_FONT_SIZE
 
     @classmethod
     def defaults(cls, paths: AppPaths) -> "AppConfig":
@@ -336,6 +370,8 @@ class AppConfig:
             last_conversation_id="",
             chat_drafts={},
             theme="matrix",
+            chat_font_family=DEFAULT_CHAT_FONT_FAMILY,
+            chat_font_size=DEFAULT_CHAT_FONT_SIZE,
         )
 
     @classmethod

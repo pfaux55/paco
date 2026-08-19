@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import ctypes
+from ctypes import wintypes
+import sys
+
 from PySide6.QtCore import QByteArray, QThreadPool, QTimer, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QStackedWidget, QVBoxLayout, QWidget
@@ -25,7 +29,7 @@ from local_matrix_assistant.services.workspace_analysis import WorkspaceAnalysis
 from local_matrix_assistant.services.word_documents import WordDocumentService
 from local_matrix_assistant.ui.agent_panel import AgentPanel
 from local_matrix_assistant.ui.brand import paco_icon, paco_mark
-from local_matrix_assistant.ui.chat_panel import ChatPanel
+from local_matrix_assistant.ui.chat_panel import ChatPanel, MessageInput
 from local_matrix_assistant.ui.main_window_agent import AgentWindowMixin
 from local_matrix_assistant.ui.main_window_chat import ChatWindowMixin
 from local_matrix_assistant.ui.main_window_settings import SettingsStatusWindowMixin
@@ -48,10 +52,17 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
     def __init__(self, paths: AppPaths, config: AppConfig) -> None:
         super().__init__()
+        self.setAcceptDrops(True)
         self.setWindowIcon(paco_icon())
         self.paths = paths
         self.config = config
-        self.setStyleSheet(stylesheet_for_theme(config.theme))
+        self.setStyleSheet(
+            stylesheet_for_theme(
+                config.theme,
+                config.chat_font_family,
+                config.chat_font_size,
+            )
+        )
         self.history_store = HistoryStore(paths.chats_dir, paths.history_file)
         self.agent_history_store = AgentHistoryStore(paths.data_dir / "agent_history.json")
         initial_conversation = self.history_store.load_preferred_or_latest(
@@ -72,7 +83,10 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.conversation_memory_service = ConversationMemoryService()
         self.attachment_service = AttachmentService()
         self._pending_chat_attachments: list[LocalAttachment] = []
+        self._pending_agent_attachments: list[LocalAttachment] = []
+        self._active_agent_attachments: list[LocalAttachment] = []
         self._chat_file_dialog = None
+        self._agent_file_dialog = None
         self._message_bubbles: list[tuple[MessageBubble, object]] = []
         self._rendered_message_start = 0
         self._history_search_generation = 0
@@ -81,8 +95,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self._composer_before_edit: tuple[str, list[LocalAttachment]] | None = None
         self.available_ollama_models: list[str] = []
         self.desktop_action_service = DesktopActionService(
-            working_folders=config.working_folders,
-            active_working_folder=config.active_working_folder,
+            locked_root=paths.root / "sandbox",
         )
         self.agent_permission_store = AgentPermissionStore(
             paths.data_dir / "agent_permissions.json"
@@ -260,6 +273,10 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
                 self.desktop_action_service.active_working_folder
                 or self.desktop_action_service.default_files_dir
             ),
+        )
+        self.agent_panel.choose_folder_button.setEnabled(False)
+        self.agent_panel.choose_folder_button.setToolTip(
+            "Agent is locked to the repository sandbox folder."
         )
         self.agent_panel.set_permission_mode(self._agent_permission_mode)
         self.voice_panel = VoicePanel(self.config)
@@ -576,6 +593,8 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.chat_panel.input_box.textChanged.connect(self._on_chat_draft_changed)
         self.chat_panel.attach_button.clicked.connect(self._choose_chat_attachments)
         self.chat_panel.input_box.file_paths_dropped.connect(self._add_chat_attachment_paths)
+        self.chat_panel.composer_panel.file_paths_dropped.connect(self._add_chat_attachment_paths)
+        self.chat_panel.file_paths_dropped.connect(self._add_chat_attachment_paths)
         self.chat_panel.input_box.clipboard_image_pasted.connect(self._add_chat_clipboard_image)
         self.chat_panel.attachment_remove_requested.connect(self._remove_chat_attachment)
         self.chat_panel.edit_cancel_requested.connect(self._cancel_message_edit)
@@ -606,6 +625,11 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
         self.agent_panel.run_button.clicked.connect(self._run_agent_command)
         self.agent_panel.command_input.submit_requested.connect(self._run_agent_command)
+        self.agent_panel.attach_button.clicked.connect(self._choose_agent_attachments)
+        self.agent_panel.command_input.file_paths_dropped.connect(self._add_agent_attachment_paths)
+        self.agent_panel.command_panel.file_paths_dropped.connect(self._add_agent_attachment_paths)
+        self.agent_panel.file_paths_dropped.connect(self._add_agent_attachment_paths)
+        self.agent_panel.attachment_remove_requested.connect(self._remove_agent_attachment)
         self.agent_panel.choose_folder_button.clicked.connect(self._choose_agent_folder)
         self.agent_panel.apply_edit_requested.connect(self._apply_pending_workspace_edit)
         self.agent_panel.apply_and_test_requested.connect(self._apply_pending_workspace_edit_and_test)
@@ -641,6 +665,8 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         self.settings_panel.refresh_button.clicked.connect(self.refresh_status)
         self.settings_panel.save_button.clicked.connect(self._save_settings)
         self.settings_panel.theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        self.settings_panel.font_family_combo.currentTextChanged.connect(self._on_font_changed)
+        self.settings_panel.font_size_combo.currentIndexChanged.connect(self._on_font_changed)
         self.settings_panel.model_combo.currentTextChanged.connect(self._on_model_changed)
         self.settings_panel.model_install_button.clicked.connect(self._start_model_install)
         self.settings_panel.model_cancel_button.clicked.connect(self._cancel_model_install)
@@ -801,7 +827,109 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
 
 
+    def _active_file_drop_mode(self) -> str:
+        current = self.page_stack.currentWidget() if hasattr(self, "page_stack") else None
+        if current is getattr(self, "chat_panel", None):
+            return "chat"
+        if current is getattr(self, "agent_panel", None):
+            return "agent"
+        return ""
+
+    def _route_file_drop_paths(self, paths: list[str]) -> bool:
+        mode = self._active_file_drop_mode()
+        if not paths or not mode:
+            return False
+        if mode == "chat":
+            self._add_chat_attachment_paths(paths)
+        else:
+            self._add_agent_attachment_paths(paths)
+        return True
+
+    def _set_window_file_drop_active(self, active: bool, mode: str = "") -> None:
+        destinations = {
+            "chat": getattr(getattr(self, "chat_panel", None), "composer_panel", None),
+            "agent": getattr(getattr(self, "agent_panel", None), "command_panel", None),
+        }
+        for destination_mode, widget in destinations.items():
+            if widget is None:
+                continue
+            enabled = active and destination_mode == mode
+            widget.setProperty("dragActive", enabled)
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+
+    def dragEnterEvent(self, event) -> None:  # type: ignore[override]
+        mode = self._active_file_drop_mode()
+        if mode and MessageInput._local_file_paths(event.mimeData()):
+            self._set_window_file_drop_active(True, mode)
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:  # type: ignore[override]
+        if self._active_file_drop_mode() and MessageInput._local_file_paths(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event) -> None:  # type: ignore[override]
+        self._set_window_file_drop_active(False)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:  # type: ignore[override]
+        paths = MessageInput._local_file_paths(event.mimeData())
+        self._set_window_file_drop_active(False)
+        if self._route_file_drop_paths(paths):
+            event.acceptProposedAction()
+            return
+        super().dropEvent(event)
+
+    def _set_native_windows_file_drops(self, enabled: bool) -> None:
+        if sys.platform != "win32":
+            return
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        drag_accept_files = shell32.DragAcceptFiles
+        drag_accept_files.argtypes = [wintypes.HWND, wintypes.BOOL]
+        drag_accept_files.restype = None
+        drag_accept_files(wintypes.HWND(int(self.winId())), bool(enabled))
+
+    @staticmethod
+    def _windows_drop_paths(drop_handle: int) -> list[str]:
+        if sys.platform != "win32" or not drop_handle:
+            return []
+        shell32 = ctypes.WinDLL("shell32", use_last_error=True)
+        drag_query_file = shell32.DragQueryFileW
+        drag_query_file.argtypes = [wintypes.HANDLE, wintypes.UINT, wintypes.LPWSTR, wintypes.UINT]
+        drag_query_file.restype = wintypes.UINT
+        drag_finish = shell32.DragFinish
+        drag_finish.argtypes = [wintypes.HANDLE]
+        drag_finish.restype = None
+        handle = wintypes.HANDLE(drop_handle)
+        paths: list[str] = []
+        try:
+            count = min(AttachmentService.max_files, int(drag_query_file(handle, 0xFFFFFFFF, None, 0)))
+            for index in range(count):
+                length = int(drag_query_file(handle, index, None, 0))
+                if length <= 0 or length > 32_767:
+                    continue
+                buffer = ctypes.create_unicode_buffer(length + 1)
+                if drag_query_file(handle, index, buffer, length + 1):
+                    paths.append(buffer.value)
+        finally:
+            drag_finish(handle)
+        return paths
+
+    def nativeEvent(self, event_type, message):  # type: ignore[override]
+        if sys.platform == "win32" and event_type in (b"windows_generic_MSG", b"windows_dispatcher_MSG"):
+            native_message = wintypes.MSG.from_address(int(message))
+            if native_message.message == 0x0233:  # WM_DROPFILES
+                paths = self._windows_drop_paths(int(native_message.wParam))
+                QTimer.singleShot(0, lambda dropped=list(paths): self._route_file_drop_paths(dropped))
+                return True, 0
+        return super().nativeEvent(event_type, message)
+
     def closeEvent(self, event) -> None:  # type: ignore[override]
+        self._set_native_windows_file_drops(False)
         if self._theme_save_timer.isActive():
             self._theme_save_timer.stop()
         if self._chat_draft_save_timer.isActive():
@@ -841,6 +969,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)
+        self._set_native_windows_file_drops(True)
         self.startup_sequence.sync_geometry()
         self.startup_sequence.begin()
 

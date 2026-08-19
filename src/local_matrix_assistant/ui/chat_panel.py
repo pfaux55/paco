@@ -104,12 +104,60 @@ class MessageInput(QPlainTextEdit):
         self.style().polish(self)
 
 
-class ChatPanel(QWidget):
+class FileDropTargetMixin:
+    def dragEnterEvent(self, event) -> None:  # type: ignore[override]
+        if MessageInput._local_file_paths(event.mimeData()):
+            self._set_drag_active(True)
+            event.acceptProposedAction()
+            return
+        super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:  # type: ignore[override]
+        if MessageInput._local_file_paths(event.mimeData()):
+            event.acceptProposedAction()
+            return
+        super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event) -> None:  # type: ignore[override]
+        self._set_drag_active(False)
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:  # type: ignore[override]
+        paths = MessageInput._local_file_paths(event.mimeData())
+        self._set_drag_active(False)
+        if paths:
+            self.file_paths_dropped.emit(paths)
+            event.acceptProposedAction()
+            return
+        super().dropEvent(event)
+
+    def _set_drag_active(self, active: bool) -> None:
+        target = getattr(self, "composer_panel", None) or getattr(
+            self,
+            "command_panel",
+            self,
+        )
+        target.setProperty("dragActive", active)
+        target.style().unpolish(target)
+        target.style().polish(target)
+
+
+class FileDropFrame(FileDropTargetMixin, QFrame):
+    file_paths_dropped = Signal(list)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+
+class ChatPanel(FileDropTargetMixin, QWidget):
+    file_paths_dropped = Signal(list)
     attachment_remove_requested = Signal(str)
     edit_cancel_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
+        self.setAcceptDrops(True)
         icon_path = Path(__file__).resolve().parents[1] / "assets" / "mic_icon.svg"
         wave_icon_path = Path(__file__).resolve().parents[1] / "assets" / "voice_wave_icon.svg"
         layout = QHBoxLayout(self)
@@ -192,7 +240,7 @@ class ChatPanel(QWidget):
             lambda _minimum, _maximum: self._sync_jump_to_latest_button()
         )
 
-        self.composer_panel = QFrame()
+        self.composer_panel = FileDropFrame()
         self.composer_panel.setObjectName("composerDock")
         composer_layout = QVBoxLayout(self.composer_panel)
         composer_layout.setContentsMargins(18, 18, 18, 14)

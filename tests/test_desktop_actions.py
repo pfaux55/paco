@@ -240,6 +240,30 @@ class DesktopActionServiceTests(unittest.TestCase):
             self.assertEqual("ready", (working_folder / "result.txt").read_text(encoding="utf-8"))
             self.assertFalse((default_folder / "result.txt").exists())
 
+    def test_locked_root_ignores_saved_and_runtime_folder_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            sandbox = root / "sandbox"
+            outside = root / "outside"
+            outside.mkdir()
+            service = DesktopActionService(
+                working_folders=[str(outside)],
+                active_working_folder=str(outside),
+                locked_root=sandbox,
+            )
+
+            service.update_working_folders([str(outside)], str(outside))
+            action = service.parse("create file result.txt with content ready")
+            service.execute(action)  # type: ignore[arg-type]
+
+            self.assertEqual(sandbox.resolve(), service.active_working_folder)
+            self.assertEqual([sandbox.resolve()], service.working_folders)
+            self.assertEqual("ready", (sandbox / "result.txt").read_text(encoding="utf-8"))
+            with self.assertRaisesRegex(DesktopActionError, "Agent tab"):
+                service.execute(  # type: ignore[arg-type]
+                    service.parse(f'create file "{outside / "blocked.txt"}"')
+                )
+
     def test_absolute_file_path_must_be_in_allowed_folder(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

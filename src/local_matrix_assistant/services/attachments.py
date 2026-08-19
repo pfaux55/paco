@@ -72,6 +72,50 @@ class AttachmentService:
     image_suffixes = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif"}
     _word_namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
+    def load_batch(
+        self,
+        existing_attachments: list[LocalAttachment],
+        raw_paths: list[str],
+    ) -> tuple[list[LocalAttachment], int, list[str]]:
+        """Load a bounded batch while preserving already selected snapshots."""
+        attachments = list(existing_attachments)
+        existing_paths = {
+            os.path.normcase(os.path.abspath(item.path))
+            for item in attachments
+            if Path(item.path).is_absolute()
+        }
+        remaining_characters = self.max_total_content_characters - sum(
+            len(item.content) for item in attachments
+        )
+        image_count = sum(bool(item.image_data) for item in attachments)
+        errors: list[str] = []
+        added = 0
+        for raw_path in raw_paths:
+            normalized = os.path.normcase(os.path.abspath(os.path.expanduser(raw_path)))
+            if normalized in existing_paths:
+                errors.append(f"{Path(raw_path).name}: already attached")
+                continue
+            if len(attachments) >= self.max_files:
+                errors.append(f"Only {self.max_files} files can be attached at once")
+                break
+            try:
+                attachment = self.load(
+                    raw_path,
+                    available_characters=remaining_characters,
+                )
+            except AttachmentError as exc:
+                errors.append(str(exc))
+                continue
+            if attachment.image_data and image_count >= self.max_images:
+                errors.append(f"Only {self.max_images} images can be attached at once")
+                continue
+            attachments.append(attachment)
+            existing_paths.add(normalized)
+            remaining_characters -= len(attachment.content)
+            image_count += bool(attachment.image_data)
+            added += 1
+        return attachments, added, errors
+
     def load(self, raw_path: str, *, available_characters: int | None = None) -> LocalAttachment:
         path = Path(os.path.abspath(os.path.expanduser(raw_path)))
         if not path.exists():

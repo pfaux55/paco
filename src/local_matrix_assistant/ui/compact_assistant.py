@@ -128,7 +128,13 @@ class CompactAssistantWindow(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        self.setStyleSheet(stylesheet_for_theme(config.theme))
+        self.setStyleSheet(
+            stylesheet_for_theme(
+                config.theme,
+                config.chat_font_family,
+                config.chat_font_size,
+            )
+        )
         self._build_ui()
         self.place_on_screen(screen_under_cursor())
         self._set_state("loading", "Checking local Ollama models…")

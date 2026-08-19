@@ -245,6 +245,32 @@ class ConfigTests(unittest.TestCase):
             paths.settings_file.write_text('{"theme": "unknown"}', encoding="utf-8")
             self.assertEqual("matrix", AppConfig.load(paths).theme)
 
+    def test_chat_font_preferences_round_trip_and_reject_unsafe_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_paths(Path(tmp))
+            config = AppConfig.defaults(paths)
+            config.chat_font_family = "Segoe UI"
+            config.chat_font_size = 17
+            config.save(paths)
+
+            loaded = AppConfig.load(paths)
+
+            self.assertEqual("Segoe UI", loaded.chat_font_family)
+            self.assertEqual(17, loaded.chat_font_size)
+
+            paths.settings_file.write_text(
+                json.dumps(
+                    {
+                        "chat_font_family": 'Unsafe"; color: red',
+                        "chat_font_size": 500,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            repaired = AppConfig.load(paths)
+            self.assertEqual("Consolas", repaired.chat_font_family)
+            self.assertEqual(32, repaired.chat_font_size)
+
     def test_load_and_save_preserves_preferred_input_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
