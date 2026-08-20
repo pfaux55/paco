@@ -16,6 +16,7 @@ class ChatMessage:
 @dataclass(slots=True)
 class ChatStreamResult:
     content: str
+    thinking: str = ""
     canceled: bool = False
     total_duration_ns: int = 0
     load_duration_ns: int = 0

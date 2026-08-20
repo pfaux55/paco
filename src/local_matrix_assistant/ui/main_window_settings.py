@@ -82,6 +82,7 @@ class SettingsStatusWindowMixin:
             preferred_input_name=self.voice_panel.input_device_combo.currentData() or "",
             playback_output_name=self.voice_panel.output_device_combo.currentData() or "",
             ollama_model=self.settings_panel.model_combo.currentText().strip() or self.config.ollama_model,
+            show_thinking=self.settings_panel.show_thinking_checkbox.isChecked(),
         )
         self._apply_runtime_config()
         if not persisted:
@@ -102,6 +103,8 @@ class SettingsStatusWindowMixin:
         self.agent_panel.set_active_folder(str(self.desktop_action_service.active_working_folder or ""))
         self.settings_panel.tts_model_input.setText(self.config.tts_model_path)
         self.settings_panel.tts_config_input.setText(self.config.tts_config_path)
+        for bubble, _message in getattr(self, "_message_bubbles", []):
+            bubble.set_show_thinking(self.config.show_thinking)
 
     def _set_activity(self, text: str) -> None:
         self.chat_panel.status_panel.set_activity(text)

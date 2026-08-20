@@ -29,6 +29,9 @@ class OllamaStatus:
 
 
 class OllamaClient:
+    _think_option_key = "_paco_think"
+    max_thinking_characters = 30_000
+
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout = 180
@@ -119,6 +122,8 @@ class OllamaClient:
             raise
 
         chunks: list[str] = []
+        thinking_chunks: list[str] = []
+        thinking_characters = 0
         stream_metrics: dict[str, int] = {}
         watcher_finished = threading.Event()
 
@@ -147,6 +152,11 @@ class OllamaClient:
                         raise OllamaError(f"Ollama streaming failed: {error}")
                     message = payload.get("message", {})
                     content = message.get("content", "") if isinstance(message, dict) else ""
+                    thinking = message.get("thinking", "") if isinstance(message, dict) else ""
+                    if thinking and thinking_characters < self.max_thinking_characters:
+                        bounded = thinking[: self.max_thinking_characters - thinking_characters]
+                        thinking_chunks.append(bounded)
+                        thinking_characters += len(bounded)
                     if content:
                         chunks.append(content)
                         on_chunk(content)
@@ -176,6 +186,7 @@ class OllamaClient:
             raise OllamaError("Ollama returned an empty response.")
         return ChatStreamResult(
             content=content,
+            thinking="".join(thinking_chunks).strip(),
             canceled=should_cancel(),
             total_duration_ns=stream_metrics.get("total_duration", 0),
             load_duration_ns=stream_metrics.get("load_duration", 0),
@@ -342,14 +353,16 @@ class OllamaClient:
             if images:
                 api_message["images"] = images
             api_messages.append(api_message)
+        request_options = dict(options or {})
+        think = request_options.pop(OllamaClient._think_option_key, False) is True
         payload = {
             "model": model,
             "stream": stream,
-            "think": False,
+            "think": think,
             "messages": api_messages,
         }
-        if options:
-            payload["options"] = options
+        if request_options:
+            payload["options"] = request_options
         return payload
 
     @staticmethod

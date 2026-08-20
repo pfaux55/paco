@@ -89,6 +89,20 @@ class ChatPanelTests(unittest.TestCase):
         self.panel.set_model_profile("coding")
         self.assertEqual("coding", self.panel.current_model_profile())
 
+    def test_think_button_uses_a_monochrome_icon_and_is_checkable(self) -> None:
+        self.assertTrue(self.panel.think_button.isCheckable())
+        self.assertTrue(self.panel.think_button.icon().isNull() is False)
+        self.assertFalse(self.panel.think_button.isChecked())
+
+        self.panel.think_button.click()
+
+        self.assertTrue(self.panel.think_button.isChecked())
+        self.assertEqual("Think", self.panel.think_button.text())
+        self.assertLess(
+            self.panel.left_action_stack.indexOf(self.panel.think_button),
+            self.panel.left_action_stack.indexOf(self.panel.attach_button),
+        )
+
     def test_history_rows_elide_without_a_horizontal_scrollbar(self) -> None:
         self.assertEqual(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff,

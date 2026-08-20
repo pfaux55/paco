@@ -213,7 +213,7 @@ class ChatWindowMixin:
         registration_index: int | None = None,
         scroll: bool = True,
     ) -> MessageBubble:
-        bubble = MessageBubble(message)
+        bubble = MessageBubble(message, show_thinking=self.config.show_thinking)
         target_index = (
             self.chat_panel.chat_layout.count() - 1
             if layout_index is None
@@ -1265,11 +1265,13 @@ class ChatWindowMixin:
             self.chat_panel.set_context_note("")
 
         selection = self._active_model_selection
+        think_enabled = self.chat_panel.think_button.isChecked()
         self._active_reply_metadata = {
             "model_name": model,
             "model_profile": selection.profile_label if selection else "Manual",
             "model_reason": selection.reason if selection else "Direct model request",
             "model_automatic": bool(selection and selection.automatic),
+            "thinking_enabled": think_enabled,
             "context_estimated_tokens": context_stats.estimated_tokens,
             "context_token_budget": context_stats.token_budget,
             "context_trimmed_messages": context_stats.trimmed_messages,
@@ -1338,6 +1340,7 @@ class ChatWindowMixin:
         options = {
             "num_ctx": selection.context_window if selection else 8192,
             "num_predict": selection.max_output_tokens if selection else 1536,
+            "_paco_think": think_enabled,
         }
 
         worker = StreamWorker(
@@ -1442,6 +1445,8 @@ class ChatWindowMixin:
 
         final_metadata = dict(reply_metadata) if isinstance(reply_metadata, dict) else {}
         final_metadata.update(performance_metadata)
+        if self.config.show_thinking and result.thinking:
+            final_metadata["thinking"] = result.thinking
         final_message = ChatMessage(
             role="assistant",
             content=result.content.strip(),
@@ -1970,6 +1975,8 @@ class ChatWindowMixin:
         self.chat_panel.cancel_button.setEnabled(busy and allow_cancel)
         if hasattr(self.chat_panel, "model_profile_combo"):
             self.chat_panel.model_profile_combo.setEnabled(not busy)
+        if hasattr(self.chat_panel, "think_button"):
+            self.chat_panel.think_button.setEnabled(not busy)
         attachment_controls = getattr(self.chat_panel, "set_attachment_controls_enabled", None)
         if callable(attachment_controls):
             attachment_controls(not busy)

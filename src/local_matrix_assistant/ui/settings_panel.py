@@ -4,6 +4,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
+    QCheckBox,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -168,6 +169,14 @@ class SettingsPanel(QWidget):
             1,
         )
         model_layout.addLayout(model_grid)
+
+        self.show_thinking_checkbox = QCheckBox("Show thinking when Think mode is enabled")
+        self.show_thinking_checkbox.setChecked(config.show_thinking)
+        self.show_thinking_checkbox.setAccessibleName("Show model thinking")
+        self.show_thinking_checkbox.setToolTip(
+            "Display and save the local model's returned thinking with assistant replies"
+        )
+        model_layout.addWidget(self.show_thinking_checkbox)
 
         self._installed_models: set[str] = set()
         self._model_install_busy = False

@@ -37,6 +37,17 @@ class OllamaPayloadTests(unittest.TestCase):
 
         self.assertNotIn("options", payload)
 
+    def test_payload_enables_thinking_without_sending_internal_option_to_ollama(self) -> None:
+        payload = OllamaClient._build_payload(
+            "qwen3.5:4b",
+            self.messages,
+            stream=True,
+            options={"num_ctx": 8192, "_paco_think": True},
+        )
+
+        self.assertTrue(payload["think"])
+        self.assertEqual({"num_ctx": 8192}, payload["options"])
+
     def test_payload_sends_bounded_base64_images_only_on_the_attached_message(self) -> None:
         import base64
 
@@ -136,6 +147,30 @@ class OllamaPayloadTests(unittest.TestCase):
         self.assertAlmostEqual(40.0, result.generation_tokens_per_second)
         self.assertTrue(response.closed)
         self.assertTrue(session.closed)
+
+    def test_stream_separates_thinking_from_answer_content(self) -> None:
+        response = FakePullResponse(
+            [
+                '{"message":{"thinking":"Check evidence. ","content":""},"done":false}',
+                '{"message":{"thinking":"Conclude.","content":"Answer"},"done":true}',
+            ]
+        )
+        session = FakePullSession()
+        client = OllamaClient("http://127.0.0.1:11434")
+        chunks: list[str] = []
+
+        with patch.object(client, "_open_cancellable_stream", return_value=(response, session)):
+            result = client.chat_stream(
+                "qwen3.5:4b",
+                self.messages,
+                chunks.append,
+                lambda: False,
+                options={"_paco_think": True},
+            )
+
+        self.assertEqual("Check evidence. Conclude.", result.thinking)
+        self.assertEqual("Answer", result.content)
+        self.assertEqual(["Answer"], chunks)
 
     def test_stream_surfaces_in_band_ollama_error(self) -> None:
         response = FakePullResponse(['{"error":"model runner crashed","done":true}'])

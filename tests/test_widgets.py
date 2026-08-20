@@ -60,6 +60,22 @@ class WidgetTests(unittest.TestCase):
         self.assertFalse(assistant.role_icon.isHidden())
         self.assertTrue(user.role_icon.isHidden())
 
+    def test_thinking_is_only_visible_when_enabled(self) -> None:
+        message = ChatMessage(
+            "assistant",
+            "Answer",
+            "now",
+            metadata={"thinking": "Private reasoning"},
+        )
+        bubble = MessageBubble(message)
+
+        self.assertTrue(bubble.thinking_panel.isHidden())
+
+        bubble.set_show_thinking(True)
+
+        self.assertFalse(bubble.thinking_panel.isHidden())
+        self.assertEqual("Private reasoning", bubble.thinking_label.text())
+
     def test_fenced_content_is_split_without_losing_surrounding_markdown(self) -> None:
         segments = split_fenced_content("Before\n\n```python\nprint('ready')\n```\n\nAfter")
 

@@ -212,6 +212,18 @@ class ConfigTests(unittest.TestCase):
 
             self.assertEqual("auto", loaded.model_profile)
 
+    def test_show_thinking_setting_round_trips_and_rejects_non_boolean_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_paths(Path(tmp))
+            config = AppConfig.defaults(paths)
+            config.show_thinking = True
+            config.save(paths)
+
+            self.assertTrue(AppConfig.load(paths).show_thinking)
+
+            paths.settings_file.write_text('{"show_thinking": "yes"}', encoding="utf-8")
+            self.assertFalse(AppConfig.load(paths).show_thinking)
+
     def test_sidebar_preference_round_trips_and_rejects_non_boolean_values(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths = build_paths(Path(tmp))

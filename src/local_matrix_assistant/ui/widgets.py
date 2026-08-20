@@ -264,7 +264,7 @@ class MessageContentWidget(QWidget):
 class MessageBubble(QFrame):
     action_requested = Signal(str)
 
-    def __init__(self, message: ChatMessage) -> None:
+    def __init__(self, message: ChatMessage, *, show_thinking: bool = False) -> None:
         super().__init__()
         self._actions_enabled = True
         self._retry_allowed = True
@@ -314,6 +314,22 @@ class MessageBubble(QFrame):
         self.copy_message_button.setAccessibleName("Copy message")
         self.copy_message_button.clicked.connect(self._copy_message)
         header_layout.addWidget(self.copy_message_button)
+
+        self._show_thinking = show_thinking
+        self.thinking_panel = QFrame()
+        self.thinking_panel.setObjectName("messageThinkingPanel")
+        thinking_layout = QVBoxLayout(self.thinking_panel)
+        thinking_layout.setContentsMargins(11, 9, 11, 9)
+        thinking_layout.setSpacing(5)
+        self.thinking_heading = QLabel("THINKING")
+        self.thinking_heading.setObjectName("messageThinkingHeading")
+        thinking_layout.addWidget(self.thinking_heading)
+        self.thinking_label = QLabel("")
+        self.thinking_label.setObjectName("messageThinkingText")
+        self.thinking_label.setWordWrap(True)
+        self.thinking_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        thinking_layout.addWidget(self.thinking_label)
+        self.thinking_panel.setVisible(False)
 
         self.content_widget = MessageContentWidget()
         self.content_widget.link_error.connect(self._show_link_error)
@@ -390,6 +406,7 @@ class MessageBubble(QFrame):
         layout.addLayout(header_layout)
         layout.addWidget(self.attachment_preview_host)
         layout.addWidget(self.attachments_label)
+        layout.addWidget(self.thinking_panel)
         layout.addWidget(self.content_widget)
         layout.addWidget(self.error_panel)
         layout.addWidget(self.sources_label)
@@ -425,6 +442,7 @@ class MessageBubble(QFrame):
         self.role_label.setText(f"{role_label}  {message.timestamp}")
         self._message_content = message.content
         self._message_metadata = dict(message.metadata)
+        self._sync_thinking_visibility()
         is_pending = bool(message.metadata.get("pending"))
         is_error = bool(message.metadata.get("error"))
         is_interrupted = bool(message.metadata.get("interrupted"))
@@ -523,6 +541,8 @@ class MessageBubble(QFrame):
                 if message.metadata.get("model_automatic"):
                     route_label = f"Auto: {route_label}"
                 status_parts.append(route_label)
+            if message.metadata.get("thinking_enabled"):
+                status_parts.append("Think enabled")
             if message.metadata.get("web_search_used"):
                 provider = message.metadata.get("web_search_provider", "web search")
                 status_parts.append(f"Used {provider}")
@@ -561,6 +581,15 @@ class MessageBubble(QFrame):
 
         self.style().unpolish(self)
         self.style().polish(self)
+
+    def set_show_thinking(self, show: bool) -> None:
+        self._show_thinking = bool(show)
+        self._sync_thinking_visibility()
+
+    def _sync_thinking_visibility(self) -> None:
+        thinking = str(getattr(self, "_message_metadata", {}).get("thinking", "")).strip()
+        self.thinking_label.setText(thinking)
+        self.thinking_panel.setVisible(self._show_thinking and bool(thinking))
 
     def update_pending_status(
         self,

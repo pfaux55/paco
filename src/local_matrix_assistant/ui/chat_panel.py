@@ -160,6 +160,7 @@ class ChatPanel(FileDropTargetMixin, QWidget):
         self.setAcceptDrops(True)
         icon_path = Path(__file__).resolve().parents[1] / "assets" / "mic_icon.svg"
         wave_icon_path = Path(__file__).resolve().parents[1] / "assets" / "voice_wave_icon.svg"
+        brain_icon_path = Path(__file__).resolve().parents[1] / "assets" / "brain_icon.svg"
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -256,6 +257,15 @@ class ChatPanel(FileDropTargetMixin, QWidget):
         self.web_search_button = QPushButton("Web Search Off")
         self.web_search_button.setObjectName("togglePillOff")
         self.web_search_button.setCheckable(True)
+        self.think_button = QPushButton("Think")
+        self.think_button.setObjectName("thinkButton")
+        self.think_button.setCheckable(True)
+        self.think_button.setIcon(QIcon(str(brain_icon_path)))
+        self.think_button.setIconSize(QSize(20, 20))
+        self.think_button.setFixedWidth(72)
+        self.think_button.setToolTip("Enable deeper model thinking for the next reply")
+        self.think_button.setAccessibleName("Think mode")
+        self.think_button.setAccessibleDescription("Toggle deeper local-model reasoning")
         self.model_profile_combo = NoWheelComboBox()
         self.model_profile_combo.setObjectName("modelProfileCombo")
         self.model_profile_combo.setToolTip("Choose automatic or task-specific local model routing")
@@ -364,12 +374,18 @@ class ChatPanel(FileDropTargetMixin, QWidget):
         input_row = QHBoxLayout()
         input_row.setSpacing(12)
 
+        self.left_action_stack = QVBoxLayout()
+        self.left_action_stack.setSpacing(8)
+        self.left_action_stack.addStretch(1)
+        self.left_action_stack.addWidget(self.think_button)
+
         self.attach_button = QPushButton("+ File")
         self.attach_button.setObjectName("attachmentButton")
         self.attach_button.setToolTip("Attach local documents, code, PDFs, or images (Ctrl+O)")
         self.attach_button.setAccessibleName("Attach files")
         self.attach_button.setFixedWidth(72)
-        input_row.addWidget(self.attach_button, alignment=Qt.AlignmentFlag.AlignBottom)
+        self.left_action_stack.addWidget(self.attach_button)
+        input_row.addLayout(self.left_action_stack)
 
         self.input_box = MessageInput()
         self.input_box.accept_clipboard_images = True

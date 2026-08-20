@@ -129,6 +129,7 @@ def _coerce_scalar_values(data: dict, defaults: "AppConfig") -> None:
         "auto_speak_responses",
         "web_search_enabled",
         "microphone_muted",
+        "show_thinking",
     )
     for field in boolean_fields:
         value = data.get(field)
@@ -329,6 +330,7 @@ class AppConfig:
     theme: str = "matrix"
     chat_font_family: str = DEFAULT_CHAT_FONT_FAMILY
     chat_font_size: int = DEFAULT_CHAT_FONT_SIZE
+    show_thinking: bool = False
 
     @classmethod
     def defaults(cls, paths: AppPaths) -> "AppConfig":
@@ -372,6 +374,7 @@ class AppConfig:
             theme="matrix",
             chat_font_family=DEFAULT_CHAT_FONT_FAMILY,
             chat_font_size=DEFAULT_CHAT_FONT_SIZE,
+            show_thinking=False,
         )
 
     @classmethod

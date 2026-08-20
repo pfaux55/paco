@@ -693,6 +693,20 @@ QFrame#messageAssistant[messageState="save_error"] {
     background: #171006;
     border-color: #8b5d2f;
 }
+QFrame#messageThinkingPanel {
+    background: #0b1210;
+    border: 1px solid #3a4540;
+    border-radius: 10px;
+}
+QLabel#messageThinkingHeading {
+    color: #aeb8b2;
+    font-size: 9px;
+    font-weight: 800;
+}
+QLabel#messageThinkingText {
+    color: #c8cfcb;
+    font-size: 12px;
+}
 QLabel#messageRole {
     color: #30e487;
     font-weight: 750;
@@ -1313,12 +1327,18 @@ QPushButton:disabled {
 }
 QPushButton#togglePillOff,
 QPushButton#togglePillOn,
-QPushButton#voiceOnlyButton {
+QPushButton#voiceOnlyButton,
+QPushButton#thinkButton {
     border-radius: 12px;
     padding: 10px 16px;
 }
+QPushButton#thinkButton {
+    padding: 8px 6px;
+    font-size: 10px;
+}
 QPushButton#togglePillOn,
 QPushButton#voiceOnlyButton,
+QPushButton#thinkButton:checked,
 QPushButton#sendCircleButton,
 QPushButton#micCircleButtonActive {
     background: #123821;
@@ -1327,6 +1347,7 @@ QPushButton#micCircleButtonActive {
 }
 QPushButton#togglePillOn:hover,
 QPushButton#voiceOnlyButton:hover,
+QPushButton#thinkButton:hover,
 QPushButton#sendCircleButton:hover,
 QPushButton#micCircleButtonActive:hover {
     background: #164a2b;
