@@ -138,6 +138,40 @@ class CompactAssistantTests(unittest.TestCase):
         self.assertEqual("Main app", window.main_mode_button.toolTip())
         window.close()
 
+    def test_ctrl_c_and_ctrl_v_copy_and_paste_in_compact_prompt(self) -> None:
+        window = self.build_window()
+        window.show()
+        window.prompt_input.setText("copy compact text")
+        window.prompt_input.selectAll()
+        window.prompt_input.setFocus()
+
+        QTest.keyClick(window.prompt_input, Qt.Key_C, Qt.ControlModifier)
+        self.assertEqual("copy compact text", QApplication.clipboard().text())
+
+        window.prompt_input.clear()
+        QApplication.clipboard().setText("paste compact text")
+        QTest.keyClick(window.prompt_input, Qt.Key_V, Qt.ControlModifier)
+        self.assertEqual("paste compact text", window.prompt_input.text())
+        window.close()
+
+    def test_close_button_requests_process_exit(self) -> None:
+        window = self.build_window()
+        requests: list[bool] = []
+        window.exit_requested.connect(lambda: requests.append(True))
+
+        window.close_button.click()
+
+        self.assertEqual([True], requests)
+
+    def test_programmatic_close_for_mode_switch_does_not_request_exit(self) -> None:
+        window = self.build_window()
+        requests: list[bool] = []
+        window.exit_requested.connect(lambda: requests.append(True))
+
+        window.close()
+
+        self.assertEqual([], requests)
+
     def test_target_geometry_is_bottom_right_and_bounded_across_work_areas(self) -> None:
         cases = (
             (QRect(100, 50, 1920, 1040), (346, 416)),
@@ -151,12 +185,15 @@ class CompactAssistantTests(unittest.TestCase):
                 self.assertEqual(COMPACT_SCREEN_MARGIN, available.right() - geometry.right())
                 self.assertEqual(COMPACT_SCREEN_MARGIN, available.bottom() - geometry.bottom())
 
-    def test_compact_transcript_uses_a_slim_rounded_scrollbar(self) -> None:
+    def test_every_scrollbar_uses_the_compact_slim_rounded_style(self) -> None:
         stylesheet = stylesheet_for_theme("matrix")
 
-        self.assertIn("QScrollArea#compactTranscript QScrollBar:vertical", stylesheet)
+        self.assertIn("QScrollBar:vertical", stylesheet)
+        self.assertIn("QScrollBar:horizontal", stylesheet)
+        self.assertNotIn("QScrollArea#compactTranscript QScrollBar", stylesheet)
         self.assertIn("border-radius: 4px", stylesheet)
         self.assertIn("width: 8px", stylesheet)
+        self.assertIn("height: 8px", stylesheet)
 
     def test_compact_mode_uses_saved_font_family_and_size(self) -> None:
         config = build_config()
@@ -287,8 +324,14 @@ class CompactLauncherTests(unittest.TestCase):
             def setFont(self, _font) -> None:  # noqa: N802
                 pass
 
+            def installEventFilter(self, _filter) -> None:  # noqa: N802
+                pass
+
             def windowIcon(self):  # noqa: N802
                 return self.icon
+
+            def quit(self) -> None:
+                pass
 
             def exec(self) -> int:
                 return 17
@@ -309,6 +352,7 @@ class CompactLauncherTests(unittest.TestCase):
 
         self.assertEqual(17, result)
         compact_window.assert_called_once_with(config)
+        window.exit_requested.connect.assert_called_once()
         window.show.assert_called_once_with()
 
 

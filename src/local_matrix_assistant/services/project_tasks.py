@@ -13,36 +13,36 @@ import threading
 import time
 from typing import Callable
 
+from local_matrix_assistant.services.command_router import POLITE_PREFIX
 from local_matrix_assistant.services.desktop_actions import DesktopActionError, DesktopActionService
 
 
-_POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 _RUN_TESTS_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:run|execute)(?:\s+the)?(?:\s+(?:project|workspace|python|unit))?\s+tests?"
+    rf"^\s*{POLITE_PREFIX}(?:run|execute)(?:\s+the)?(?:\s+(?:project|workspace|python|unit))?\s+tests?"
     r"(?:\s+(?:in|for)\s+(?P<target>.+?))?\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _BUILD_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:(?:run|execute)\s+(?:the\s+)?(?:(?:project|workspace)\s+)?build|"
+    rf"^\s*{POLITE_PREFIX}(?:(?:run|execute)\s+(?:the\s+)?(?:(?:project|workspace)\s+)?build|"
     r"build\s+(?:the\s+)?(?:project|workspace))\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _LINT_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:(?:(?:run|execute)\s+)?(?:the\s+)?(?:(?:project|workspace)\s+)?"
+    rf"^\s*{POLITE_PREFIX}(?:(?:(?:run|execute)\s+)?(?:the\s+)?(?:(?:project|workspace)\s+)?"
     r"lint(?:er|ing)?|lint(?:er|ing)?\s+(?:the\s+)?(?:project|workspace))\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _FORMAT_CHECK_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:(?:(?:run|execute)\s+)?(?:check|verify)\s+(?:the\s+)?"
+    rf"^\s*{POLITE_PREFIX}(?:(?:(?:run|execute)\s+)?(?:check|verify)\s+(?:the\s+)?"
     r"(?:(?:project|workspace)\s+)?format(?:ting)?|format(?:ting)?\s+check)\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _FORMAT_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}format\s+(?:the\s+)?(?:project|workspace)\s*[.!?]*\s*$",
+    rf"^\s*{POLITE_PREFIX}format\s+(?:the\s+)?(?:project|workspace)\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _RUN_PYTHON_FILE_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:run|execute)(?:\s+the)?(?:\s+python)?(?:\s+(?:file|script))?\s+"
+    rf"^\s*{POLITE_PREFIX}(?:run|execute)(?:\s+the)?(?:\s+python)?(?:\s+(?:file|script))?\s+"
     r"(?P<target>\"[^\"\r\n]+\.py\"|'[^'\r\n]+\.py'|[^\r\n]+?\.py)\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
@@ -136,7 +136,7 @@ class ProjectTaskService:
     def plan(self, request: ProjectTaskRequest) -> ProjectTaskPlan:
         if request.kind not in {"run_tests", "build", "lint", "format_check", "format", "run_python"}:
             raise DesktopActionError(f"Unsupported project task: {request.kind}")
-        root = self._workspace_root()
+        root = self.desktop_actions.workspace_root()
         if request.kind == "run_python":
             if not request.target:
                 raise DesktopActionError("Choose a Python file to run.")
@@ -578,13 +578,6 @@ class ProjectTaskService:
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=2)
-
-    def _workspace_root(self) -> Path:
-        root = self.desktop_actions.active_working_folder or self.desktop_actions.default_files_dir
-        resolved = root.resolve()
-        if not resolved.is_dir():
-            raise DesktopActionError("Choose an existing folder in the Agent tab first.")
-        return resolved
 
     def _resolve_target(self, target: str, root: Path) -> Path:
         requested = Path(target).expanduser()

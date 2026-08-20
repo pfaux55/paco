@@ -10,8 +10,8 @@ import re
 import time
 import uuid
 
-from PySide6.QtCore import QSignalBlocker, QTimer, Qt, Signal
-from PySide6.QtGui import QPixmap, QTextCursor
+from PySide6.QtCore import QSignalBlocker, QSize, QTimer, Qt, Signal
+from PySide6.QtGui import QIcon, QPixmap, QTextCursor
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -84,6 +84,7 @@ class AgentPanel(FileDropTargetMixin, QWidget):
 
     def __init__(self, active_folder: str, workspace_scope: str = "") -> None:
         super().__init__()
+        brain_icon_path = Path(__file__).resolve().parents[1] / "assets" / "brain_icon.svg"
         self.setAcceptDrops(True)
         self._busy = False
         self._task_running = False
@@ -447,6 +448,16 @@ class AgentPanel(FileDropTargetMixin, QWidget):
         self.attach_button.setAccessibleName("Attach files to Agent")
         self.attach_button.setFixedWidth(72)
         input_row.addWidget(self.attach_button, alignment=Qt.AlignmentFlag.AlignBottom)
+        self.think_button = QPushButton("Think")
+        self.think_button.setObjectName("thinkButton")
+        self.think_button.setCheckable(True)
+        self.think_button.setIcon(QIcon(str(brain_icon_path)))
+        self.think_button.setIconSize(QSize(20, 20))
+        self.think_button.setFixedWidth(72)
+        self.think_button.setToolTip("Enable deeper model thinking for Agent requests")
+        self.think_button.setAccessibleName("Agent think mode")
+        self.think_button.setAccessibleDescription("Toggle deeper local-model reasoning for Agent")
+        input_row.addWidget(self.think_button, alignment=Qt.AlignmentFlag.AlignBottom)
         self.command_input = MessageInput()
         self.command_input.setPlaceholderText(
             "Tell Agent what you need or drop files here. Enter sends; Shift+Enter adds a new line."
@@ -751,6 +762,7 @@ class AgentPanel(FileDropTargetMixin, QWidget):
         self.run_script_button.setEnabled(self._script_approval_pending and not busy)
         self.reject_script_button.setEnabled(self._script_approval_pending and not busy)
         self.permission_mode_combo.setEnabled(not busy)
+        self.think_button.setEnabled(not busy and not self._script_approval_pending)
         self.set_attachment_controls_enabled(not busy)
         self._sync_output_actions()
         self._sync_command_recall_state()
@@ -900,6 +912,7 @@ class AgentPanel(FileDropTargetMixin, QWidget):
         self.script_approval_panel.style().unpolish(self.script_approval_panel)
         self.script_approval_panel.style().polish(self.script_approval_panel)
         self.command_input.setEnabled(False)
+        self.think_button.setEnabled(False)
         self.run_script_button.setEnabled(not self._busy)
         self.reject_script_button.setEnabled(not self._busy)
         self._sync_command_recall_state()
@@ -920,6 +933,7 @@ class AgentPanel(FileDropTargetMixin, QWidget):
         self.script_command_view.clear()
         self.script_warning_label.clear()
         self.command_input.setEnabled(not self._busy)
+        self.think_button.setEnabled(not self._busy)
         self._sync_command_recall_state()
         self._sync_run_state()
 

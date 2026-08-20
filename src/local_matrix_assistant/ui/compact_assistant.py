@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPushButton,
     QScrollArea,
     QStyle,
@@ -25,6 +24,7 @@ from local_matrix_assistant.services.attachments import AttachmentService, Local
 from local_matrix_assistant.services.model_router import ModelRouter, ModelSelection
 from local_matrix_assistant.services.ollama import OllamaClient, OllamaStatus
 from local_matrix_assistant.ui.brand import paco_icon, paco_mark
+from local_matrix_assistant.ui.inputs import ClipboardLineEdit
 from local_matrix_assistant.ui.task_runner import TaskRunner
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
 from local_matrix_assistant.ui.workers import FunctionWorker, StreamWorker
@@ -80,6 +80,7 @@ class CompactAssistantWindow(QWidget):
     """Session-only Paco overlay for text and one-shot screen questions."""
 
     closing = Signal()
+    exit_requested = Signal()
     main_mode_requested = Signal()
 
     def __init__(
@@ -108,6 +109,7 @@ class CompactAssistantWindow(QWidget):
         self._busy = False
         self._capture_in_progress = False
         self._closing = False
+        self._exit_requested = False
         self._expanded = False
         self._anchor_screen = None
         self._expanded_geometry = QRect()
@@ -216,7 +218,7 @@ class CompactAssistantWindow(QWidget):
         self.capture_button.setIconSize(QSize(15, 15))
         self.capture_button.clicked.connect(self.request_screen_capture)
 
-        self.prompt_input = QLineEdit()
+        self.prompt_input = ClipboardLineEdit()
         self.prompt_input.setObjectName("compactPromptInput")
         self.prompt_input.setAccessibleName("Question")
         self.prompt_input.setPlaceholderText("Ask Paco...")
@@ -247,7 +249,7 @@ class CompactAssistantWindow(QWidget):
             self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton)
         )
         self.close_button.setIconSize(QSize(12, 12))
-        self.close_button.clicked.connect(self.close)
+        self.close_button.clicked.connect(self.request_exit)
         controls.addWidget(self.close_button)
         root.addWidget(self.input_bar)
 
@@ -679,11 +681,14 @@ class CompactAssistantWindow(QWidget):
     def _timestamp() -> str:
         return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+    def request_exit(self) -> None:
+        self._exit_requested = True
+        self.close()
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+        should_exit = self._exit_requested or event.spontaneous()
         was_closing = self._closing
         self._closing = True
-        if not was_closing:
-            self.closing.emit()
         self.task_runner.close()
         if self._active_stream_worker is not None:
             self._active_stream_worker.cancel()
@@ -694,6 +699,10 @@ class CompactAssistantWindow(QWidget):
         self._clear_transcript()
         self.thread_pool.waitForDone(500)
         event.accept()
+        if not was_closing:
+            self.closing.emit()
+        if should_exit:
+            self.exit_requested.emit()
 
     def _clear_transcript(self) -> None:
         while self.transcript_layout.count() > 1:

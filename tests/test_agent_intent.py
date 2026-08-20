@@ -40,6 +40,14 @@ class AgentIntentServiceTests(unittest.TestCase):
         self.assertEqual("answer", intent.kind)
         self.assertEqual("Explain the result.", intent.request)
 
+    def test_truncates_oversized_model_text_consistently(self) -> None:
+        intent = AgentIntentService.parse_response(
+            '{"kind":"answer","request":"' + ("a" * 2_010) + '"}'
+        )
+
+        self.assertEqual(AgentIntentService.max_request_characters + 3, len(intent.request))
+        self.assertTrue(intent.request.endswith("..."))
+
 
 if __name__ == "__main__":
     unittest.main()

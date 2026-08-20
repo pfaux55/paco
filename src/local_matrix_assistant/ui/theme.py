@@ -81,29 +81,50 @@ QWidget#compactTranscriptHost {
     background: transparent;
     border: none;
 }
-QScrollArea#compactTranscript QScrollBar:vertical {
+QScrollBar:vertical {
     background: transparent;
     border: none;
     width: 8px;
     margin: 3px 0;
 }
-QScrollArea#compactTranscript QScrollBar::handle:vertical {
+QScrollBar:horizontal {
+    background: transparent;
+    border: none;
+    height: 8px;
+    margin: 0 3px;
+}
+QScrollBar::handle:vertical {
     background: #35684a;
     border: none;
     border-radius: 4px;
     min-height: 30px;
 }
-QScrollArea#compactTranscript QScrollBar::handle:vertical:hover {
+QScrollBar::handle:horizontal {
+    background: #35684a;
+    border: none;
+    border-radius: 4px;
+    min-width: 30px;
+}
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:horizontal:hover {
     background: #24e081;
 }
-QScrollArea#compactTranscript QScrollBar::add-line:vertical,
-QScrollArea#compactTranscript QScrollBar::sub-line:vertical {
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {
     background: transparent;
     border: none;
     height: 0;
 }
-QScrollArea#compactTranscript QScrollBar::add-page:vertical,
-QScrollArea#compactTranscript QScrollBar::sub-page:vertical {
+QScrollBar::add-line:horizontal,
+QScrollBar::sub-line:horizontal {
+    background: transparent;
+    border: none;
+    width: 0;
+}
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical,
+QScrollBar::add-page:horizontal,
+QScrollBar::sub-page:horizontal {
     background: transparent;
 }
 QFrame#compactInputBar {

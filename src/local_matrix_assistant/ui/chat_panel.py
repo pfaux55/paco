@@ -5,7 +5,7 @@ import binascii
 from pathlib import Path
 
 from PySide6.QtCore import QSize, QTimer, Qt, Signal
-from PySide6.QtGui import QIcon, QImage, QPixmap
+from PySide6.QtGui import QIcon, QImage, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -44,6 +44,14 @@ class MessageInput(QPlainTextEdit):
         self.accept_clipboard_images = False
 
     def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        if event.matches(QKeySequence.StandardKey.Copy):
+            self.copy()
+            event.accept()
+            return
+        if event.matches(QKeySequence.StandardKey.Paste):
+            self.paste()
+            event.accept()
+            return
         is_enter = event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
         no_modifiers = event.modifiers() == Qt.KeyboardModifier.NoModifier
         if is_enter and no_modifiers:

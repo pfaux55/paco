@@ -30,5 +30,6 @@ if __name__ == "__main__":
         raise SystemExit(0)
 
     from local_matrix_assistant.app import main
+    from local_matrix_assistant.process_exit import exit_after_qt_shutdown
 
-    raise SystemExit(main())
+    exit_after_qt_shutdown(main())

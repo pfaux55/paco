@@ -125,16 +125,7 @@ class OllamaClient:
         thinking_chunks: list[str] = []
         thinking_characters = 0
         stream_metrics: dict[str, int] = {}
-        watcher_finished = threading.Event()
-
-        def close_on_cancel() -> None:
-            while not watcher_finished.wait(0.05):
-                if should_cancel():
-                    response.close()
-                    return
-
-        watcher = threading.Thread(target=close_on_cancel, name="paco-ollama-cancel", daemon=True)
-        watcher.start()
+        watcher_finished = self._start_cancel_watcher(response, should_cancel, "paco-ollama-cancel")
         try:
             with response:
                 for raw_line in response.iter_lines(decode_unicode=True):
@@ -221,20 +212,7 @@ class OllamaClient:
                 f"Ollama could not install '{model_name}' (HTTP {response.status_code}): {detail}"
             )
 
-        watcher_finished = threading.Event()
-
-        def close_on_cancel() -> None:
-            while not watcher_finished.wait(0.05):
-                if should_cancel():
-                    response.close()
-                    return
-
-        watcher = threading.Thread(
-            target=close_on_cancel,
-            name="paco-ollama-pull-cancel",
-            daemon=True,
-        )
-        watcher.start()
+        watcher_finished = self._start_cancel_watcher(response, should_cancel, "paco-ollama-pull-cancel")
         succeeded = False
         try:
             with response:
@@ -325,6 +303,21 @@ class OllamaClient:
                 session.close()
                 raise OllamaError(f"Could not start the Ollama request: {outcome}") from outcome
             return outcome, session
+
+    @staticmethod
+    def _start_cancel_watcher(
+        response: requests.Response, should_cancel: Callable[[], bool], name: str
+    ) -> threading.Event:
+        finished = threading.Event()
+
+        def close_on_cancel() -> None:
+            while not finished.wait(0.05):
+                if should_cancel():
+                    response.close()
+                    return
+
+        threading.Thread(target=close_on_cancel, name=name, daemon=True).start()
+        return finished
 
     @staticmethod
     def _nonnegative_int(value: object) -> int:

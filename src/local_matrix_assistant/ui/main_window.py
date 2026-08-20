@@ -48,6 +48,7 @@ from local_matrix_assistant.ui.workers import StreamWorker
 
 class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsStatusWindowMixin, QMainWindow):
     compact_mode_requested = Signal()
+    exit_requested = Signal()
     compact_layout_width = 1060
 
     def __init__(self, paths: AppPaths, config: AppConfig) -> None:
@@ -966,6 +967,9 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
             self._agent_history_save_timer.stop()
             self._save_agent_history(report_errors=False)
         super().closeEvent(event)
+        if event.isAccepted() and not getattr(self, "_exit_signal_emitted", False):
+            self._exit_signal_emitted = True
+            self.exit_requested.emit()
 
     def showEvent(self, event) -> None:  # type: ignore[override]
         super().showEvent(event)

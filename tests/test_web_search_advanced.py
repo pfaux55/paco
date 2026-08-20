@@ -231,6 +231,7 @@ class AdvancedWebSearchProblemTests(unittest.TestCase):
 
     def test_time_sensitive_detection_matches_words_not_substrings(self) -> None:
         self.assertTrue(WebSearchService.is_time_sensitive_query("latest release news"))
+        self.assertTrue(WebSearchService.is_time_sensitive_query("energy price forecast"))
         self.assertFalse(WebSearchService.is_time_sensitive_query("newspaper updater design"))
 
 

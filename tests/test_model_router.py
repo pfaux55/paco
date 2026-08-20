@@ -32,9 +32,9 @@ class ModelRouterTests(unittest.TestCase):
         self.assertEqual("fast", selection.profile)
         self.assertEqual("llama3.2:3b", selection.model)
         self.assertTrue(selection.automatic)
-        self.assertEqual(4096, selection.context_window)
+        self.assertEqual(8192, selection.context_window)
         self.assertEqual(768, selection.max_output_tokens)
-        self.assertEqual(3072, selection.input_token_budget)
+        self.assertEqual(7168, selection.input_token_budget)
 
     def test_auto_uses_coder_for_programming_request(self) -> None:
         selection = self.router.select(

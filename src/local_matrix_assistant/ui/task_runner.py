@@ -15,6 +15,11 @@ class TaskRunner:
 
     def close(self) -> None:
         self._closing = True
+        for worker in tuple(self._active_workers):
+            cancel = getattr(worker, "cancel", None)
+            if callable(cancel):
+                cancel()
+        self._thread_pool.clear()
 
     def wait_for_done(self, timeout_ms: int) -> None:
         self._thread_pool.waitForDone(timeout_ms)
@@ -60,7 +65,11 @@ class TaskRunner:
             if not self._closing:
                 on_error(message)
 
-        worker.signals.chunk.connect(on_chunk)
+        def _emit_chunk(payload: object) -> None:
+            if not self._closing:
+                on_chunk(payload)
+
+        worker.signals.chunk.connect(_emit_chunk)
         worker.signals.result.connect(_finish_result)
         worker.signals.error.connect(_finish_error)
         self._thread_pool.start(worker)

@@ -100,6 +100,29 @@ class CommandRouterTests(unittest.TestCase):
 
 
 class DesktopActionServiceTests(unittest.TestCase):
+    def test_workspace_root_returns_active_existing_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            service = DesktopActionService(
+                root / "default",
+                working_folders=[str(root)],
+                active_working_folder=str(root),
+            )
+
+            self.assertEqual(root.resolve(), service.workspace_root())
+
+    def test_workspace_root_rejects_missing_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "missing"
+            service = DesktopActionService(
+                missing,
+                working_folders=[str(missing)],
+                active_working_folder=str(missing),
+            )
+
+            with self.assertRaisesRegex(DesktopActionError, "existing folder"):
+                service.workspace_root()
+
     def test_natural_word_document_command_extracts_topic_and_filename(self) -> None:
         service = DesktopActionService()
 

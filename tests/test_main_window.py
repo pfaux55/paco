@@ -446,8 +446,21 @@ class MainWindowStateTests(unittest.TestCase):
 
         self.assertEqual(2, len([item for item in prepared if item.role == "system"]))
         self.assertEqual("What happened?", prepared[-1].content)
+        self.assertIn("make a reasoned, uncertainty-aware forecast", prepared[1].content)
         self.assertTrue(prepared[1].metadata["context_truncated"])
         self.assertLessEqual(ContextManager.estimate_messages_tokens(prepared), stats.token_budget)
+
+    def test_context_only_web_search_follow_up_uses_previous_user_topic(self) -> None:
+        window = MainWindow.__new__(MainWindow)
+        prior_request = "do an analysis of gas prices over the next 6-18 months"
+        follow_up = "pull info necessary for analysis in the next chat"
+        window.messages = [
+            ChatMessage("user", prior_request, "now"),
+            ChatMessage("assistant", "I will gather sources first.", "now"),
+            ChatMessage("user", follow_up, "now"),
+        ]
+
+        self.assertEqual(prior_request, window._resolve_web_search_query(follow_up, None))
 
     def test_persisted_memory_replaces_covered_messages_without_overlap(self) -> None:
         window = MainWindow.__new__(MainWindow)

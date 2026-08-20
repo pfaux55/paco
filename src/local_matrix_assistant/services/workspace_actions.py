@@ -14,6 +14,7 @@ import tomllib
 from typing import Callable
 import uuid
 
+from local_matrix_assistant.services.command_router import POLITE_PREFIX as _POLITE_PREFIX
 from local_matrix_assistant.services.desktop_actions import (
     DesktopActionError,
     DesktopActionResult,
@@ -21,7 +22,6 @@ from local_matrix_assistant.services.desktop_actions import (
 )
 
 
-_POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 _QUOTED = r'(?:"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\')'
 _LIST_FILES_COMMAND = re.compile(
     rf"^\s*{_POLITE_PREFIX}(?:list|show)(?:\s+the)?(?:\s+(?:project|workspace))?\s+files"
@@ -340,10 +340,10 @@ class WorkspaceActionService:
         )
 
     def workspace_root(self) -> Path:
-        return self._workspace_root()
+        return self.desktop_actions.workspace_root()
 
     def iter_workspace_files(self):
-        yield from self._walk_files(self._workspace_root())
+        yield from self._walk_files(self.workspace_root())
 
     def prepare_edit(
         self,
@@ -390,7 +390,7 @@ class WorkspaceActionService:
         model: str = "",
         run_after_create: bool = False,
     ) -> WorkspaceCreatePreview:
-        workspace_root = self._workspace_root()
+        workspace_root = self.workspace_root()
         path = self.resolve_create_target(target)
         if run_after_create and path.suffix.casefold() != ".py":
             raise DesktopActionError("Create-and-run currently supports Python source files only.")
@@ -424,9 +424,9 @@ class WorkspaceActionService:
         )
 
     def resolve_create_target(self, target: str) -> Path:
-        workspace_root = self._workspace_root()
+        workspace_root = self.workspace_root()
         path = self.desktop_actions.resolve_output_path(target, default_suffix=".txt").resolve()
-        if not self._is_inside(path, workspace_root):
+        if not self.desktop_actions.is_inside(path, workspace_root):
             raise DesktopActionError("New workspace files must stay inside the active Agent folder.")
         if os.path.lexists(path):
             raise DesktopActionError(f"The file already exists and was not overwritten: {path}")
@@ -482,11 +482,13 @@ class WorkspaceActionService:
         return DesktopActionResult("apply_edit", message, str(path))
 
     def apply_create(self, preview: WorkspaceCreatePreview) -> DesktopActionResult:
-        workspace_root = self._workspace_root()
+        workspace_root = self.workspace_root()
         if workspace_root != preview.workspace_root.resolve():
             raise DesktopActionError("The active Agent folder changed; review the new file again.")
         current_path = preview.path.resolve()
-        if current_path != preview.path or not self._is_inside(current_path, workspace_root):
+        if current_path != preview.path or not self.desktop_actions.is_inside(
+            current_path, workspace_root
+        ):
             raise DesktopActionError("The reviewed new-file target changed; the file was not created.")
         if os.path.lexists(preview.path):
             raise DesktopActionError(
@@ -496,7 +498,7 @@ class WorkspaceActionService:
         try:
             preview.path.parent.mkdir(parents=True, exist_ok=True)
             resolved_after_parent_create = preview.path.resolve()
-            if resolved_after_parent_create != preview.path or not self._is_inside(
+            if resolved_after_parent_create != preview.path or not self.desktop_actions.is_inside(
                 resolved_after_parent_create,
                 workspace_root,
             ):
@@ -566,7 +568,7 @@ class WorkspaceActionService:
         return DesktopActionResult(
             "apply_batch_edit",
             f"Applied reviewed batch edit to {len(resolved)} files: {names}.\nBackups:\n{backup_lines}",
-            str(self._workspace_root()),
+            str(self.workspace_root()),
         )
 
     def _list_files(
@@ -684,10 +686,10 @@ class WorkspaceActionService:
     def _resolve_existing(self, target: str, *, expect: str) -> Path:
         if not target.strip() or "\x00" in target:
             raise DesktopActionError("The workspace path is invalid.")
-        root = self._workspace_root()
+        root = self.workspace_root()
         requested = Path(target).expanduser()
         path = requested.resolve() if requested.is_absolute() else (root / requested).resolve()
-        if not self._is_inside(path, root):
+        if not self.desktop_actions.is_inside(path, root):
             raise DesktopActionError("Workspace commands must stay inside the active Agent folder.")
         if not path.exists():
             raise DesktopActionError(f"Workspace path not found: {path}")
@@ -697,15 +699,8 @@ class WorkspaceActionService:
             raise DesktopActionError(f"Expected a folder: {path}")
         return path
 
-    def _workspace_root(self) -> Path:
-        root = self.desktop_actions.active_working_folder or self.desktop_actions.default_files_dir
-        resolved = root.resolve()
-        if not resolved.exists() or not resolved.is_dir():
-            raise DesktopActionError("Choose an existing folder in the Agent tab first.")
-        return resolved
-
     def _walk_files(self, directory: Path):
-        root = self._workspace_root()
+        root = self.workspace_root()
         for current, subdirectories, filenames in os.walk(directory, followlinks=False):
             current_path = Path(current)
             try:
@@ -719,7 +714,7 @@ class WorkspaceActionService:
             )
             for filename in sorted(filenames):
                 path = (current_path / filename).resolve()
-                if self._is_inside(path, root) and path.is_file():
+                if self.desktop_actions.is_inside(path, root) and path.is_file():
                     yield path
 
     def _read_text(self, path: Path) -> tuple[str, bool]:
@@ -803,7 +798,7 @@ class WorkspaceActionService:
             raise DesktopActionError(f"Proposed {label} content is invalid: {exc}") from exc
 
     def _relative(self, path: Path) -> str:
-        root = self._workspace_root()
+        root = self.workspace_root()
         try:
             relative = path.relative_to(root)
         except ValueError:
@@ -862,14 +857,6 @@ class WorkspaceActionService:
         if target:
             targets.append(target)
         return targets
-
-    @staticmethod
-    def _is_inside(path: Path, root: Path) -> bool:
-        try:
-            path.relative_to(root)
-            return True
-        except ValueError:
-            return False
 
     @staticmethod
     def _unquote(value: str) -> str:

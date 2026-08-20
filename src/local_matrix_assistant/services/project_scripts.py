@@ -9,6 +9,7 @@ import re
 import shutil
 from typing import Callable
 
+from local_matrix_assistant.services.command_router import POLITE_PREFIX
 from local_matrix_assistant.services.desktop_actions import (
     DesktopActionError,
     DesktopActionResult,
@@ -21,14 +22,13 @@ from local_matrix_assistant.services.project_tasks import (
 )
 
 
-_POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 _RUN_SCRIPT_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:run|execute)\s+(?:(?:the\s+)?(?:project|npm)\s+)?script\s+"
+    rf"^\s*{POLITE_PREFIX}(?:run|execute)\s+(?:(?:the\s+)?(?:project|npm)\s+)?script\s+"
     r"(?P<name>[A-Za-z0-9][A-Za-z0-9:._-]{0,63})\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _LIST_SCRIPTS_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:list|show)(?:\s+the)?\s+(?:(?:project|npm)\s+)?scripts?\s*[.!?]*\s*$",
+    rf"^\s*{POLITE_PREFIX}(?:list|show)(?:\s+the)?\s+(?:(?:project|npm)\s+)?scripts?\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _HIGH_RISK_NAME = re.compile(
@@ -170,7 +170,7 @@ class ProjectScriptService:
             raise DesktopActionError("The configured project script changed; review it again before running.")
 
     def _read_scripts(self) -> tuple[Path, Path, bytes, dict[str, str]]:
-        root = self._workspace_root()
+        root = self.desktop_actions.workspace_root()
         package = (root / "package.json").resolve()
         if package.parent != root or not package.is_file():
             raise DesktopActionError("The active Agent folder does not contain a package.json file.")
@@ -203,10 +203,3 @@ class ProjectScriptService:
                 continue
             scripts[name] = cleaned
         return root, package, raw, scripts
-
-    def _workspace_root(self) -> Path:
-        root = self.desktop_actions.active_working_folder or self.desktop_actions.default_files_dir
-        resolved = root.resolve()
-        if not resolved.is_dir():
-            raise DesktopActionError("Choose an existing folder in the Agent tab first.")
-        return resolved

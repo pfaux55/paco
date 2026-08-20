@@ -513,6 +513,7 @@ class AgentWindowMixin:
             return True
         if source != "follow_up":
             self._clear_follow_up_fix_offer()
+        self._active_agent_thinking_enabled = bool(self.agent_panel.think_button.isChecked())
         self._show_agent_page()
         command_role = (
             "Voice command"
@@ -963,6 +964,16 @@ class AgentWindowMixin:
         options: dict | None = None,
     ) -> str:
         self._ensure_agent_action_active(should_cancel)
+        if hasattr(self, "_active_agent_thinking_enabled"):
+            think_enabled = bool(self._active_agent_thinking_enabled)
+        else:
+            think_enabled = bool(self.agent_panel.think_button.isChecked())
+        request_options = dict(options or {})
+        if think_enabled:
+            request_options["_paco_think"] = True
+        else:
+            request_options.pop("_paco_think", None)
+        effective_options = request_options if options is not None or think_enabled else None
         attachments = list(getattr(self, "_active_agent_attachments", []))
         if attachments:
             prepared_messages = list(messages)
@@ -985,8 +996,8 @@ class AgentWindowMixin:
         chat_stream = getattr(self.ollama_client, "chat_stream", None)
         if callable(chat_stream):
             result = (
-                chat_stream(model, messages, lambda _chunk: None, should_cancel, options=options)
-                if options is not None
+                chat_stream(model, messages, lambda _chunk: None, should_cancel, options=effective_options)
+                if effective_options is not None
                 else chat_stream(model, messages, lambda _chunk: None, should_cancel)
             )
             if result.canceled or should_cancel():
@@ -994,8 +1005,8 @@ class AgentWindowMixin:
             content = result.content.strip()
         else:
             content = (
-                self.ollama_client.chat(model, messages, options=options)
-                if options is not None
+                self.ollama_client.chat(model, messages, options=effective_options)
+                if effective_options is not None
                 else self.ollama_client.chat(model, messages)
             ).strip()
             self._ensure_agent_action_active(should_cancel)

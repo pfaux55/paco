@@ -199,6 +199,31 @@ class AgentWindowTests(unittest.TestCase):
             self.assertNotIn("path", sent.metadata["attachments"][0])
             harness.agent_panel.close()
 
+    def test_agent_think_mode_is_forwarded_to_ollama(self) -> None:
+        class CapturingClient:
+            def __init__(self) -> None:
+                self.options: dict | None = None
+
+            def chat(self, _model: str, _messages: list[ChatMessage], *, options=None) -> str:
+                self.options = options
+                return "reviewed"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            harness = AgentHarness(Path(tmp))
+            client = CapturingClient()
+            harness.ollama_client = client
+            harness.agent_panel.think_button.setChecked(True)
+
+            response = harness._request_agent_model(
+                "local-model",
+                [ChatMessage(role="user", content="Review this", timestamp="")],
+                should_cancel=lambda: False,
+            )
+
+            self.assertEqual("reviewed", response)
+            self.assertEqual({"_paco_think": True}, client.options)
+            harness.agent_panel.close()
+
     def test_locked_sandbox_accepts_external_files_as_read_only_snapshots(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

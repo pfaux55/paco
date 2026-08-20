@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import re
 
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
-from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object, truncate_text
 
 
 _BLOCKED_DESTRUCTIVE = re.compile(
@@ -53,8 +53,7 @@ class AgentIntentService:
         request = clean_model_text(payload.get("request"), "The model did not interpret the request.")
         if kind not in _INTENT_KINDS:
             raise DesktopActionError(f"The model returned an unsupported request type: {kind}")
-        if len(request) > cls.max_request_characters:
-            request = request[: cls.max_request_characters].rstrip() + "..."
+        request = truncate_text(request, cls.max_request_characters)
         return AgentIntent(kind=kind, request=request)
 
     @staticmethod

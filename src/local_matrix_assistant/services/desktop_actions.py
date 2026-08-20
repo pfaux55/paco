@@ -7,6 +7,8 @@ import re
 import shutil
 import subprocess
 
+from local_matrix_assistant.services.command_router import POLITE_PREFIX
+
 
 class DesktopActionError(RuntimeError):
     """Raised when a requested local desktop action cannot be completed."""
@@ -29,22 +31,21 @@ class DesktopActionResult:
     target: str
 
 
-_POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 _OPEN_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:open|launch|start)(?:\s+up)?\s+(?:the\s+)?(?P<target>.+?)\s*[.!?]*\s*$",
+    rf"^\s*{POLITE_PREFIX}(?:open|launch|start)(?:\s+up)?\s+(?:the\s+)?(?P<target>.+?)\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _CREATE_FILE_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?file"
+    rf"^\s*{POLITE_PREFIX}(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?file"
     r"(?:\s+(?:called|named))?\s+(?P<details>.+?)\s*$",
     re.IGNORECASE | re.DOTALL,
 )
 _INCOMPLETE_CREATE_FILE_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?file\s*[.!?]*\s*$",
+    rf"^\s*{POLITE_PREFIX}(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?file\s*[.!?]*\s*$",
     re.IGNORECASE,
 )
 _CREATE_WORD_DOCUMENT_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?"
+    rf"^\s*{POLITE_PREFIX}(?:create|make)(?:\s+me)?\s+(?:a\s+)?(?:new\s+)?"
     r"(?:word\s+(?:document|file)|docx(?:\s+(?:document|file))?)"
     r"(?P<details>.*?)\s*[.!?]*\s*$",
     re.IGNORECASE | re.DOTALL,
@@ -164,6 +165,13 @@ class DesktopActionService:
             active = normalized[0] if normalized else None
         self.working_folders = normalized
         self.active_working_folder = active
+
+    def workspace_root(self) -> Path:
+        root = self.active_working_folder or self.default_files_dir
+        resolved = root.resolve()
+        if not resolved.is_dir():
+            raise DesktopActionError("Choose an existing folder in the Agent tab first.")
+        return resolved
 
     def parse(self, text: str) -> DesktopAction | None:
         word_match = _CREATE_WORD_DOCUMENT_COMMAND.match(text)
@@ -335,7 +343,7 @@ class DesktopActionService:
         allowed_roots = [default_root, *(folder.resolve() for folder in self.working_folders)]
         if requested.is_absolute():
             destination = requested.resolve()
-            if not any(self._is_inside(destination, root) for root in allowed_roots):
+            if not any(self.is_inside(destination, root) for root in allowed_roots):
                 raise DesktopActionError("Choose that folder in the Agent tab before creating files there.")
         else:
             base = (self.active_working_folder or default_root).resolve()
@@ -389,7 +397,7 @@ class DesktopActionService:
             self.default_files_dir.resolve(),
             *(folder.resolve() for folder in self.working_folders),
         ]
-        if not any(self._is_inside(path, root) for root in allowed_roots):
+        if not any(self.is_inside(path, root) for root in allowed_roots):
             raise DesktopActionError("Choose the artifact's folder in Agent before opening it.")
         if expect_file and not path.is_file():
             raise DesktopActionError("The saved artifact is not a file.")
@@ -398,7 +406,7 @@ class DesktopActionService:
         return path
 
     @staticmethod
-    def _is_inside(path: Path, root: Path) -> bool:
+    def is_inside(path: Path, root: Path) -> bool:
         try:
             path.relative_to(root)
             return True

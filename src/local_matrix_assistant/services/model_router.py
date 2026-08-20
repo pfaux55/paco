@@ -62,7 +62,7 @@ _VISION_PRIORITIES = (
     "granite3.2-vision",
 )
 _PROFILE_BUDGETS = {
-    "fast": (4096, 768),
+    "fast": (8192, 768),
     "balanced": (8192, 1536),
     "coding": (8192, 2048),
     "reasoning": (8192, 2048),

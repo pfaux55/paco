@@ -3,9 +3,9 @@ from __future__ import annotations
 import re
 
 
-_POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
+POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 _WEB_SEARCH_COMMAND = re.compile(
-    rf"^\s*{_POLITE_PREFIX}(?:search\s+(?:the\s+)?web|search\s+online|web\s+search)"
+    rf"^\s*{POLITE_PREFIX}(?:search\s+(?:the\s+)?web|search\s+online|web\s+search)"
     r"(?:\s+for)?(?:\s*[:,-]\s*|\s+)?(?P<query>.*?)\s*[?.!]*\s*$",
     re.IGNORECASE,
 )

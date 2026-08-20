@@ -5,7 +5,7 @@ import re
 from typing import Callable
 
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
-from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object, truncate_text
 from local_matrix_assistant.services.workspace_actions import WorkspaceActionService
 
 
@@ -90,8 +90,7 @@ class WorkspaceTaskService:
             payload.get("summary"),
             "The reasoning model did not provide a task summary.",
         )
-        if len(summary) > cls.max_summary_characters:
-            summary = summary[: cls.max_summary_characters].rstrip() + "..."
+        summary = truncate_text(summary, cls.max_summary_characters)
         raw_steps = payload.get("steps")
         if not isinstance(raw_steps, list) or not raw_steps:
             raise DesktopActionError("The reasoning model did not provide a read-only investigation step.")
@@ -113,8 +112,7 @@ class WorkspaceTaskService:
                 raw_step.get("reason"),
                 "An investigation step reason is missing.",
             )
-            if len(reason) > cls.max_reason_characters:
-                reason = reason[: cls.max_reason_characters].rstrip() + "..."
+            reason = truncate_text(reason, cls.max_reason_characters)
             if tool == "read_file":
                 requested = clean_model_text(raw_step.get("path"), "A read step path is missing.")
                 canonical = allowed.get(requested.replace("\\", "/").casefold())

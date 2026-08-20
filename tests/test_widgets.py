@@ -169,14 +169,47 @@ class WidgetTests(unittest.TestCase):
         self.assertIn(r"\]", link)
         self.assertIn("a_%28b%29", link)
 
-    def test_streaming_code_stays_lightweight_until_message_finishes(self) -> None:
-        content = "```python\nprint('ready')\n```"
+    def test_web_sources_render_as_one_compact_domain_list(self) -> None:
+        bubble = MessageBubble(
+            ChatMessage(
+                role="assistant",
+                content="Source-backed answer.",
+                timestamp="now",
+                metadata={
+                    "web_sources": [
+                        {
+                            "title": "A long first source title",
+                            "url": "https://www.example.com/report",
+                            "snippet": "A long snippet that should not fill the message.",
+                            "provider": "Bing",
+                        },
+                        {
+                            "title": "Second source title",
+                            "url": "https://docs.example.org/guide",
+                            "domain": "docs.example.org",
+                            "provider": "Google",
+                        },
+                    ]
+                },
+            )
+        )
+
+        visible_text = bubble.sources_label.text()
+        self.assertIn("Sources (2)", visible_text)
+        self.assertIn("1 · example.com", visible_text)
+        self.assertIn("2 · docs.example.org", visible_text)
+        self.assertNotIn("\n", visible_text)
+        self.assertNotIn("long snippet", visible_text)
+        self.assertIn("A long first source title", bubble.sources_label.toolTip())
+
+    def test_streaming_markdown_renders_while_code_stays_lightweight(self) -> None:
+        content = "## Example\n\n```python\nprint('ready')\n```"
         bubble = MessageBubble(
             ChatMessage(role="assistant", content=content, timestamp="now", metadata={"pending": True})
         )
         self.assertEqual([], bubble.content_widget.code_blocks)
         self.assertTrue(bubble.copy_message_button.isHidden())
-        self.assertEqual(Qt.TextFormat.PlainText, bubble.body_label.textFormat())
+        self.assertEqual(Qt.TextFormat.MarkdownText, bubble.body_label.textFormat())
 
         bubble.update_message(ChatMessage(role="assistant", content=content, timestamp="now"))
 

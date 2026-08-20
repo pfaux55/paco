@@ -31,6 +31,98 @@ class _FakeResponse:
 
 
 class WebSearchSafetyTests(unittest.TestCase):
+    def test_contextual_research_follow_up_uses_prior_user_topic(self) -> None:
+        query = WebSearchService.resolve_query(
+            "pull info necessary for analysis in the next chat you will do the actual analysis",
+            ["do an analysis of gas prices over the next 6-18 months"],
+        )
+
+        self.assertEqual("do an analysis of gas prices over the next 6-18 months", query)
+
+    def test_standalone_research_request_remains_the_query(self) -> None:
+        request = "find information about gas prices in Ontario"
+
+        self.assertEqual(request, WebSearchService.resolve_query(request, ["unrelated topic here"]))
+
+    def test_contextual_research_without_prior_topic_remains_the_query(self) -> None:
+        request = "gather the sources needed for the next analysis"
+
+        self.assertEqual(request, WebSearchService.resolve_query(request, []))
+
+    def test_conversational_analysis_request_becomes_a_focused_query(self) -> None:
+        query = (
+            "do an analysis of gas prices and everything affecting them and make predictions "
+            "of where things will change and in what way in the next 6-18 months"
+        )
+
+        focused = WebSearchService.prepare_query(query)
+
+        self.assertEqual('"gas prices" factors forecast', focused)
+
+    def test_future_horizon_adds_forecast_to_focused_query(self) -> None:
+        focused = WebSearchService.prepare_query(
+            "do an analysis of gas prices over the next 6-18 months"
+        )
+
+        self.assertEqual('"gas prices" forecast', focused)
+
+    def test_prediction_research_queries_collect_inputs_for_inference(self) -> None:
+        queries = WebSearchService.prepare_research_queries(
+            "do an analysis of gas prices over the next 6-18 months"
+        )
+
+        self.assertEqual('"gas prices" forecast', queries[0])
+        self.assertTrue(any("historical data trends seasonality" in item for item in queries))
+        self.assertTrue(any("key drivers supply demand risks" in item for item in queries))
+
+    def test_prediction_search_runs_each_complementary_web_query(self) -> None:
+        service = WebSearchService(max_pages_to_extract=0)
+        result = WebSearchResult(
+            "Energy evidence",
+            "https://example.com/evidence",
+            "Historical and driver evidence.",
+            "example.com",
+            provider="Bing",
+        )
+
+        with (
+            patch.object(service, "_fetch_google_news_results", return_value=[]),
+            patch.object(service, "_fetch_rss_results", return_value=[result]) as fetch,
+        ):
+            response = service.search("gas prices over the next 6-18 months")
+
+        web_queries = [
+            call.args[1]
+            for call in fetch.call_args_list
+            if call.args[0] == "https://www.bing.com/search"
+        ]
+        self.assertEqual(WebSearchService.prepare_research_queries(
+            "gas prices over the next 6-18 months"
+        ), web_queries)
+        self.assertEqual([result], response.results)
+
+    def test_search_uses_the_focused_query_for_providers_and_response(self) -> None:
+        service = WebSearchService(max_pages_to_extract=0)
+        result = WebSearchResult(
+            "Gas price forecast",
+            "https://example.com/forecast",
+            "Gas price outlook.",
+            "example.com",
+            provider="Bing",
+        )
+        request = "do an analysis of gas prices and everything affecting them"
+
+        with patch.object(service, "_fetch_rss_results", return_value=[result]) as fetch:
+            response = service.search(request)
+
+        self.assertEqual('"gas prices" factors', response.query)
+        self.assertEqual('"gas prices" factors', fetch.call_args.args[1])
+
+    def test_direct_url_query_is_not_rewritten(self) -> None:
+        query = "analyze https://example.com/report and summarize its findings"
+
+        self.assertEqual(query, WebSearchService.prepare_query(query))
+
     def test_google_search_parses_results_and_metadata(self) -> None:
         class GoogleResponse:
             def raise_for_status(self) -> None:
@@ -413,6 +505,19 @@ class WebSearchSafetyTests(unittest.TestCase):
         self.assertIn("untrusted reference data", context)
         self.assertIn("Extracted page text (untrusted):", context)
         self.assertLess(len(context), 2300)
+
+    def test_prediction_prompt_requires_synthesis_and_uncertainty(self) -> None:
+        response = WebSearchResponse(
+            provider="test",
+            query='"gas prices" forecast',
+            results=[WebSearchResult("Source", "https://example.com", "Evidence")],
+        )
+
+        context = WebSearchService.build_prompt_context(response)
+
+        self.assertIn("Do not stop merely because no source publishes", context)
+        self.assertIn("base case", context)
+        self.assertIn("state assumptions and confidence", context)
 
     def test_search_can_cancel_while_waiting_for_response_headers(self) -> None:
         release_request = threading.Event()

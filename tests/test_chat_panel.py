@@ -13,9 +13,9 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtCore import QByteArray, QBuffer, QCoreApplication, QIODevice, QMimeData, QPoint, QPointF, QUrl
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtCore import QByteArray, QBuffer, QCoreApplication, QEvent, QIODevice, QMimeData, QPoint, QPointF, QUrl
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QKeyEvent
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit
 from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
 
@@ -23,6 +23,7 @@ from local_matrix_assistant.ui.chat_panel import ChatPanel
 from local_matrix_assistant.core.models import ChatMessage
 from local_matrix_assistant.services.attachments import LocalAttachment
 from local_matrix_assistant.ui.main_window_chat import ChatWindowMixin
+from local_matrix_assistant.ui.inputs import ClipboardShortcutFilter
 from local_matrix_assistant.ui.widgets import MessageBubble
 
 
@@ -69,6 +70,33 @@ class ChatPanelTests(unittest.TestCase):
         QTest.keyClick(self.panel.input_box, Qt.Key_Return, Qt.ShiftModifier)
         self.assertEqual([], submits)
         self.assertIn("\n", self.panel.input_box.toPlainText())
+
+    def test_ctrl_c_and_ctrl_v_copy_and_paste_in_chat_composer(self) -> None:
+        self.panel.input_box.setPlainText("copy this")
+        self.panel.input_box.selectAll()
+        self.panel.input_box.setFocus()
+
+        QTest.keyClick(self.panel.input_box, Qt.Key_C, Qt.ControlModifier)
+        self.assertEqual("copy this", QApplication.clipboard().text())
+
+        self.panel.input_box.clear()
+        QApplication.clipboard().setText("paste this")
+        QTest.keyClick(self.panel.input_box, Qt.Key_V, Qt.ControlModifier)
+        self.assertEqual("paste this", self.panel.input_box.toPlainText())
+
+    def test_application_filter_handles_ctrl_v_before_window_shortcuts(self) -> None:
+        editor = QLineEdit()
+        QApplication.clipboard().setText("paste from application filter")
+        event = QKeyEvent(
+            QEvent.Type.KeyPress,
+            Qt.Key.Key_V,
+            Qt.KeyboardModifier.ControlModifier,
+        )
+
+        handled = ClipboardShortcutFilter().eventFilter(editor, event)
+
+        self.assertTrue(handled)
+        self.assertEqual("paste from application filter", editor.text())
 
     def test_voice_only_mode_switches_content_screen(self) -> None:
         self.assertFalse(self.panel.voice_only_mode_active())

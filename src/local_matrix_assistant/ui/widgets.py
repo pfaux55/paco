@@ -230,8 +230,14 @@ class MessageContentWidget(QWidget):
         label.setTextFormat(Qt.TextFormat.MarkdownText if is_markup else Qt.TextFormat.PlainText)
         label.setText(safe_markdown_text(content) if is_markup else content)
 
-    def set_content(self, content: str, *, structured: bool) -> None:
-        segments = split_fenced_content(content) if structured else []
+    def set_content(
+        self,
+        content: str,
+        *,
+        structured: bool,
+        build_code_blocks: bool = True,
+    ) -> None:
+        segments = split_fenced_content(content) if structured and build_code_blocks else []
         has_code = any(segment.kind == "code" for segment in segments)
         if not has_code:
             self._clear_segments()
@@ -457,7 +463,11 @@ class MessageBubble(QFrame):
             if is_error
             else "normal",
         )
-        self.content_widget.set_content(message.content, structured=not is_pending)
+        self.content_widget.set_content(
+            message.content,
+            structured=True,
+            build_code_blocks=not is_pending,
+        )
         self.content_widget.setVisible(bool(message.content.strip()) or not is_error)
         self.copy_message_button.setVisible(bool(message.content.strip()) and not is_pending)
         error_detail = str(message.metadata.get("error_message", "")).strip()[:2_000]
@@ -560,24 +570,32 @@ class MessageBubble(QFrame):
 
         web_sources = message.metadata.get("web_sources", [])
         if isinstance(web_sources, list) and web_sources:
-            self.sources_label.setVisible(True)
-            lines = ["**Sources**"]
+            links: list[str] = []
+            details: list[str] = []
             for index, source in enumerate(web_sources, start=1):
                 if not isinstance(source, dict):
                     continue
-                title = str(source.get("title", source.get("url", "Source")))
-                url = str(source.get("url", ""))
-                snippet = str(source.get("snippet", "")).strip()
+                url = str(source.get("url", "")).strip()
+                title = str(source.get("title", url or "Source")).strip()
+                domain = str(source.get("domain", "")).strip()
+                if not domain and url:
+                    domain = QUrl(url).host().removeprefix("www.")
                 provider = str(source.get("provider", "")).strip()
-                if provider:
-                    title = f"{title} [{provider}]"
-                lines.append(f"{index}. {safe_markdown_link(title, url)}")
-                if snippet:
-                    lines.append(f"   {snippet}")
-            self.sources_label.setText(safe_markdown_text("\n".join(lines)))
+                label = domain or provider or f"Source {index}"
+                links.append(safe_markdown_link(f"{index} · {label}", url))
+                detail_suffix = " · ".join(part for part in (domain, provider) if part)
+                details.append(f"{index}. {title}" + (f" ({detail_suffix})" if detail_suffix else ""))
+            self.sources_label.setVisible(bool(links))
+            self.sources_label.setText(
+                safe_markdown_text(f"**Sources ({len(links)})**  ·  " + "  ·  ".join(links))
+                if links
+                else ""
+            )
+            self.sources_label.setToolTip("\n".join(details)[:2_000])
         else:
             self.sources_label.setVisible(False)
             self.sources_label.setText("")
+            self.sources_label.setToolTip("")
 
         self.style().unpolish(self)
         self.style().polish(self)

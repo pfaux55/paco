@@ -55,6 +55,18 @@ class AgentPanelTests(unittest.TestCase):
         self.panel.set_busy(True)
         self.assertFalse(self.panel.run_button.isEnabled())
 
+    def test_agent_think_mode_is_available_and_busy_safe(self) -> None:
+        self.assertTrue(self.panel.think_button.isCheckable())
+        self.assertFalse(self.panel.think_button.isChecked())
+
+        self.panel.think_button.click()
+
+        self.assertTrue(self.panel.think_button.isChecked())
+        self.panel.set_busy(True)
+        self.assertFalse(self.panel.think_button.isEnabled())
+        self.panel.set_busy(False)
+        self.assertTrue(self.panel.think_button.isEnabled())
+
     def test_agent_file_enables_send_and_can_be_removed(self) -> None:
         attachment = LocalAttachment(
             path=r"D:\outside\requirements.txt",
@@ -148,6 +160,19 @@ class AgentPanelTests(unittest.TestCase):
         self.assertEqual(["run"], runs)
         self.assertEqual("open Notepad", self.panel.take_command())
         self.assertEqual("", self.panel.command_input.toPlainText())
+
+    def test_ctrl_c_and_ctrl_v_copy_and_paste_in_agent_composer(self) -> None:
+        self.panel.command_input.setPlainText("copy agent text")
+        self.panel.command_input.selectAll()
+        self.panel.command_input.setFocus()
+
+        QTest.keyClick(self.panel.command_input, Qt.Key_C, Qt.ControlModifier)
+        self.assertEqual("copy agent text", QApplication.clipboard().text())
+
+        self.panel.command_input.clear()
+        QApplication.clipboard().setText("paste agent text")
+        QTest.keyClick(self.panel.command_input, Qt.Key_V, Qt.ControlModifier)
+        self.assertEqual("paste agent text", self.panel.command_input.toPlainText())
 
     def test_active_folder_and_action_log_are_separate(self) -> None:
         self.panel.set_active_folder(r"D:\work")

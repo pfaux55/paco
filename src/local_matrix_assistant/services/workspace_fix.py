@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
-from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object, truncate_text
 from local_matrix_assistant.services.workspace_actions import WorkspaceBatchEditPreview, WorkspaceEditPreview
 
 
@@ -57,8 +57,7 @@ class WorkspaceFixService:
             payload.get("summary"),
             "The reasoning model did not provide a fix summary.",
         )
-        if len(summary) > cls.max_summary_characters:
-            summary = summary[: cls.max_summary_characters].rstrip() + "..."
+        summary = truncate_text(summary, cls.max_summary_characters)
         raw_files = payload.get("files")
         if not isinstance(raw_files, list) or not raw_files:
             raise DesktopActionError("The reasoning model could not identify a supported file to change.")
@@ -82,8 +81,7 @@ class WorkspaceFixService:
                 raise DesktopActionError(f"The reasoning model selected {canonical} more than once.")
             seen.add(key)
             reason = clean_model_text(item.get("reason"), "No reason supplied.")
-            if len(reason) > cls.max_reason_characters:
-                reason = reason[: cls.max_reason_characters].rstrip() + "..."
+            reason = truncate_text(reason, cls.max_reason_characters)
             files.append(WorkspaceFixFile(canonical, reason))
         return WorkspaceFixPlan(summary=summary, files=tuple(files))
 

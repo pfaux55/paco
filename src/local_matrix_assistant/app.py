@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from local_matrix_assistant.core.config import AppConfig, AppPaths
 from local_matrix_assistant.core.constants import APP_NAME
+from local_matrix_assistant.process_exit import exit_after_qt_shutdown
 from local_matrix_assistant.ui.brand import (
     apply_windows_window_icon,
     bring_windows_window_to_front,
@@ -16,6 +17,7 @@ from local_matrix_assistant.ui.brand import (
     paco_icon,
 )
 from local_matrix_assistant.ui.compact_assistant import CompactAssistantWindow
+from local_matrix_assistant.ui.inputs import install_clipboard_shortcut_filter
 from local_matrix_assistant.ui.main_window import MainWindow
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
 
@@ -55,6 +57,7 @@ def main() -> int:
 
     configure_windows_app_identity()
     app = QApplication(sys.argv)
+    clipboard_shortcut_filter = install_clipboard_shortcut_filter(app)
     app.setApplicationName(APP_NAME)
     app.setWindowIcon(paco_icon())
     app.setStyleSheet(
@@ -67,6 +70,7 @@ def main() -> int:
     app.setFont(QFont("Consolas", 10))
 
     window = MainWindow(paths, config)
+    window.exit_requested.connect(lambda: exit_after_qt_shutdown(0))
     compact_window: CompactAssistantWindow | None = None
 
     def clear_compact_window(*_args) -> None:
@@ -90,6 +94,7 @@ def main() -> int:
             compact_window = CompactAssistantWindow(window.config)
             compact_window.setWindowIcon(app.windowIcon())
             compact_window.main_mode_requested.connect(show_main_mode)
+            compact_window.exit_requested.connect(lambda: exit_after_qt_shutdown(0))
             compact_window.closing.connect(close_hidden_main_window)
             compact_window.destroyed.connect(clear_compact_window)
         compact_window.show()

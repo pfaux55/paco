@@ -4,11 +4,11 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
+from local_matrix_assistant.services.command_router import POLITE_PREFIX as _POLITE_PREFIX
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
-from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object
+from local_matrix_assistant.services.model_response import clean_model_text, extract_json_object, truncate_text
 
 
-_POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 _CREATION_START = re.compile(
     rf"^\s*{_POLITE_PREFIX}(?:build|create|develop|generate|implement|make|scaffold|write)\b",
     re.IGNORECASE,
@@ -82,8 +82,7 @@ class WorkspaceCreationService:
         )
         if len(path) > cls.max_path_characters:
             raise DesktopActionError("The proposed file path is too long.")
-        if len(instructions) > cls.max_instruction_characters:
-            instructions = instructions[: cls.max_instruction_characters].rstrip() + "..."
+        instructions = truncate_text(instructions, cls.max_instruction_characters)
 
         requested = Path(path)
         if requested.is_absolute() or ".." in requested.parts or not requested.name:

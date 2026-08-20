@@ -25,6 +25,7 @@ from local_matrix_assistant.services.command_router import explicit_web_search_q
 from local_matrix_assistant.services.conversation_memory import ConversationMemoryService
 from local_matrix_assistant.services.context_manager import ContextManager, ContextStats
 from local_matrix_assistant.services.model_router import ModelRouter, ModelSelection, PROFILE_LABELS
+from local_matrix_assistant.services.web_search import WebSearchService
 from local_matrix_assistant.ui.widgets import MessageBubble
 from local_matrix_assistant.ui.workers import FunctionWorker, StreamWorker
 
@@ -754,9 +755,11 @@ class ChatWindowMixin:
                 ChatMessage(
                     role="system",
                     content=(
-                        "Use the supplied web search context when helpful. Answer web-backed claims from these "
-                        "sources only, cite them with bracketed numbers such as [1], and say when the sources do "
-                        f"not establish the answer.\n\nWeb search context:\n{web_context}"
+                        "Use the supplied web search context when helpful. Ground web-backed factual claims in "
+                        "these sources and cite them with bracketed numbers such as [1]. Clearly distinguish "
+                        "source facts from your analysis. When asked for a prediction, make a reasoned, "
+                        "uncertainty-aware forecast from the available evidence without inventing facts or "
+                        f"numbers.\n\nWeb search context:\n{web_context}"
                     ),
                     timestamp=now,
                     metadata={"web_context": True, "context_truncated": _web_truncated},
@@ -1065,7 +1068,7 @@ class ChatWindowMixin:
         if self.chat_panel.web_search_button.isChecked():
             self._set_interaction_busy(True, allow_cancel=True)
             self._set_activity("Searching the web before sending the prompt...")
-            search_query = explicit_query or user_text
+            search_query = self._resolve_web_search_query(user_text, explicit_query)
             worker = StreamWorker(
                 lambda _on_chunk, should_cancel: self.web_search_service.search(
                     search_query,
@@ -1082,6 +1085,21 @@ class ChatWindowMixin:
             )
             return
         self._request_assistant_response(model, None)
+
+    def _resolve_web_search_query(self, user_text: str, explicit_query: str | None) -> str:
+        if explicit_query:
+            return explicit_query
+        prior_messages = self.messages
+        if (
+            prior_messages
+            and prior_messages[-1].role == "user"
+            and prior_messages[-1].content.strip() == user_text.strip()
+        ):
+            prior_messages = prior_messages[:-1]
+        return WebSearchService.resolve_query(
+            user_text,
+            [message.content for message in prior_messages if message.role == "user"],
+        )
 
     def _enable_web_search_if_requested(self, user_text: str) -> str | None:
         explicit_query = explicit_web_search_query(user_text)
@@ -1291,6 +1309,7 @@ class ChatWindowMixin:
                     {
                         "title": result.title,
                         "url": result.url,
+                        "domain": result.domain,
                         "snippet": result.snippet,
                         "provider": result.provider,
                     }

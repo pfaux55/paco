@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import re
 
+from local_matrix_assistant.services.command_router import POLITE_PREFIX as _POLITE_PREFIX
 from local_matrix_assistant.services.desktop_actions import DesktopActionError
 
 
-_POLITE_PREFIX = r"(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?(?:please\s+)?"
 _CHANGE_START = re.compile(
     rf"^\s*{_POLITE_PREFIX}(?P<verb>add|allow|change|delete|ensure|fix|handle|implement|improve|introduce|"
     r"make|prevent|refactor|remove|rename|repair|resolve|support|update)\b",

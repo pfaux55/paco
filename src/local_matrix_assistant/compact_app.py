@@ -8,12 +8,14 @@ from PySide6.QtWidgets import QApplication
 
 from local_matrix_assistant.core.config import AppConfig, AppPaths
 from local_matrix_assistant.core.constants import APP_NAME
+from local_matrix_assistant.process_exit import exit_after_qt_shutdown
 from local_matrix_assistant.ui.brand import (
     apply_windows_window_icon,
     configure_windows_app_identity,
     paco_icon,
 )
 from local_matrix_assistant.ui.compact_assistant import CompactAssistantWindow
+from local_matrix_assistant.ui.inputs import install_clipboard_shortcut_filter
 from local_matrix_assistant.ui.main_window import MainWindow
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
 
@@ -24,6 +26,7 @@ def main() -> int:
 
     configure_windows_app_identity()
     app = QApplication(sys.argv)
+    clipboard_shortcut_filter = install_clipboard_shortcut_filter(app)
     app.setApplicationName(f"{APP_NAME} Compact")
     app.setWindowIcon(paco_icon())
     app.setStyleSheet(
@@ -36,6 +39,7 @@ def main() -> int:
     app.setFont(QFont("Consolas", 10))
 
     window = CompactAssistantWindow(config)
+    window.exit_requested.connect(lambda: exit_after_qt_shutdown(0))
     compact_window: CompactAssistantWindow | None = window
     main_window: MainWindow | None = None
 
@@ -53,6 +57,7 @@ def main() -> int:
             main_window = MainWindow(paths, config)
             main_window.setWindowIcon(app.windowIcon())
             main_window.compact_mode_requested.connect(show_compact_mode)
+            main_window.exit_requested.connect(lambda: exit_after_qt_shutdown(0))
         main_window.show()
         main_window.raise_()
         main_window.activateWindow()
@@ -66,6 +71,7 @@ def main() -> int:
             compact_window = CompactAssistantWindow(current_config)
             compact_window.setWindowIcon(app.windowIcon())
             compact_window.main_mode_requested.connect(show_main_mode)
+            compact_window.exit_requested.connect(lambda: exit_after_qt_shutdown(0))
             compact_window.closing.connect(close_hidden_main_window)
             compact_window.destroyed.connect(clear_compact_window)
         compact_window.show()

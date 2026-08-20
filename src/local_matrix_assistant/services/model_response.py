@@ -37,3 +37,9 @@ def clean_model_text(value: object, error_message: str) -> str:
     if not cleaned:
         raise DesktopActionError(error_message)
     return cleaned
+
+
+def truncate_text(value: str, max_characters: int) -> str:
+    if len(value) <= max_characters:
+        return value
+    return value[:max_characters].rstrip() + "..."
