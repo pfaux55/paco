@@ -194,16 +194,7 @@ class VoiceWindowMixin:
             self._apply_audio_state("Muted")
             return
         if self._awaiting_response:
-            worker = getattr(self, "_active_stream_worker", None)
-            if worker is None:
-                self._set_activity("Wait for the current Agent or web-search task before starting voice capture.")
-                return
-            self._voice_capture_pending = True
-            self._cancel_requested = True
-            worker.cancel()
-            self.chat_panel.cancel_button.setEnabled(False)
-            self._set_activity("Interrupting the current reply to listen...")
-            self._apply_audio_state("Interrupting")
+            self._set_activity("Wait for the current response or select Cancel Reply before listening.")
             return
         self._start_voice_capture()
 

@@ -30,6 +30,8 @@ class ShortcutHelpDialogTests(unittest.TestCase):
         self.assertIn(("Ctrl+K", "Search chats"), labels)
         self.assertIn(("Ctrl+B", "Toggle navigation and chat history"), labels)
         self.assertIn(("Ctrl+O", "Attach local files"), labels)
+        self.assertIn(("Ctrl++ / Ctrl+=", "Zoom in chat"), labels)
+        self.assertIn(("Ctrl+-", "Zoom out chat"), labels)
         self.assertIn(("Ctrl+Shift+Space", "Start, send, or interrupt voice capture"), labels)
         self.assertIn(("Ctrl+Shift+M", "Mute or unmute microphone"), labels)
         self.assertIn(("Ctrl+Shift+X", "Stop spoken output"), labels)

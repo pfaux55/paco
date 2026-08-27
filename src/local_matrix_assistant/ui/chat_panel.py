@@ -4,7 +4,7 @@ import base64
 import binascii
 from pathlib import Path
 
-from PySide6.QtCore import QSize, QTimer, Qt, Signal
+from PySide6.QtCore import QAbstractAnimation, QEasingCurve, QPropertyAnimation, QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QFrame,
@@ -158,6 +158,71 @@ class FileDropFrame(FileDropTargetMixin, QFrame):
         self.setAcceptDrops(True)
 
 
+class SmoothScrollArea(QScrollArea):
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._scroll_target = 0
+        self._follow_maximum = False
+        self._scroll_animation = QPropertyAnimation(self.verticalScrollBar(), b"value", self)
+        self._scroll_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._scroll_animation.finished.connect(self._finish_smooth_scroll)
+        self.verticalScrollBar().sliderPressed.connect(self._stop_smooth_scroll)
+        self.verticalScrollBar().rangeChanged.connect(self._follow_changed_maximum)
+
+    def wheelEvent(self, event) -> None:  # type: ignore[override]
+        pixel_delta = event.pixelDelta().y()
+        angle_delta = event.angleDelta().y()
+        if not pixel_delta and not angle_delta:
+            super().wheelEvent(event)
+            return
+        bar = self.verticalScrollBar()
+        if pixel_delta:
+            distance = -pixel_delta
+            duration = 100
+        else:
+            distance = round(-angle_delta / 120 * max(60, bar.singleStep() * 3))
+            duration = 180
+        start = (
+            self._scroll_target
+            if self._scroll_animation.state() == QAbstractAnimation.State.Running
+            else bar.value()
+        )
+        self._follow_maximum = False
+        self.smooth_scroll_to(start + distance, duration=duration)
+        event.accept()
+
+    def smooth_scroll_to(self, value: int, *, duration: int = 220) -> None:
+        bar = self.verticalScrollBar()
+        target = min(bar.maximum(), max(bar.minimum(), value))
+        self._scroll_target = target
+        self._scroll_animation.stop()
+        if target == bar.value():
+            return
+        self._scroll_animation.setDuration(duration)
+        self._scroll_animation.setStartValue(bar.value())
+        self._scroll_animation.setEndValue(target)
+        self._scroll_animation.start()
+
+    def smooth_scroll_to_latest(self) -> None:
+        self._follow_maximum = True
+        bar = self.verticalScrollBar()
+        distance = abs(bar.maximum() - bar.value())
+        self.smooth_scroll_to(bar.maximum(), duration=100 if distance < 150 else 220)
+
+    def _follow_changed_maximum(self, _minimum: int, maximum: int) -> None:
+        if self._follow_maximum and maximum != self._scroll_target:
+            self.smooth_scroll_to(maximum, duration=100)
+
+    def _finish_smooth_scroll(self) -> None:
+        if self.verticalScrollBar().value() == self.verticalScrollBar().maximum():
+            self._follow_maximum = False
+
+    def _stop_smooth_scroll(self) -> None:
+        self._scroll_animation.stop()
+        self._follow_maximum = False
+        self._scroll_target = self.verticalScrollBar().value()
+
+
 class ChatPanel(FileDropTargetMixin, QWidget):
     file_paths_dropped = Signal(list)
     attachment_remove_requested = Signal(str)
@@ -207,7 +272,7 @@ class ChatPanel(FileDropTargetMixin, QWidget):
         chat_header.addStretch(1)
         chat_screen_layout.addLayout(chat_header)
 
-        self.chat_scroll = QScrollArea()
+        self.chat_scroll = SmoothScrollArea()
         self.chat_scroll.setObjectName("conversationScroll")
         self.chat_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         self.chat_scroll.setWidgetResizable(True)
@@ -458,15 +523,11 @@ class ChatPanel(FileDropTargetMixin, QWidget):
         return bar.maximum() - bar.value() <= max(0, threshold)
 
     def scroll_to_latest(self) -> None:
-        bar = self.chat_scroll.verticalScrollBar()
-        bar.setValue(bar.maximum())
-        self._sync_jump_to_latest_button()
+        self.chat_scroll.smooth_scroll_to_latest()
         QTimer.singleShot(0, self._finish_scroll_to_latest)
 
     def _finish_scroll_to_latest(self) -> None:
-        bar = self.chat_scroll.verticalScrollBar()
-        bar.setValue(bar.maximum())
-        self._sync_jump_to_latest_button()
+        self.chat_scroll.smooth_scroll_to_latest()
 
     def _sync_jump_to_latest_button(self, _value: int = -1) -> None:
         bar = self.chat_scroll.verticalScrollBar()

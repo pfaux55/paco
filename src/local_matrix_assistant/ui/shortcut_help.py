@@ -10,6 +10,8 @@ SHORTCUTS = (
     ("Ctrl+B", "Toggle navigation and chat history"),
     ("Ctrl+L", "Focus chat composer"),
     ("Ctrl+O", "Attach local files"),
+    ("Ctrl++ / Ctrl+=", "Zoom in chat"),
+    ("Ctrl+-", "Zoom out chat"),
     ("Ctrl+Shift+R", "Regenerate latest response"),
     ("Ctrl+Shift+Space", "Start, send, or interrupt voice capture"),
     ("Ctrl+Shift+M", "Mute or unmute microphone"),

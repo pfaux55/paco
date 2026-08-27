@@ -70,6 +70,7 @@ class AdvancedWebSearchProblemTests(unittest.TestCase):
             provider="Bing",
         )
         with (
+            patch.object(service, "_fetch_yahoo_results", return_value=[]),
             patch.object(
                 service,
                 "_fetch_google_news_results",
@@ -89,6 +90,11 @@ class AdvancedWebSearchProblemTests(unittest.TestCase):
             max_pages_to_extract=0,
         )
         with (
+            patch.object(
+                service,
+                "_fetch_yahoo_results",
+                side_effect=WebSearchError("Yahoo unavailable"),
+            ),
             patch.object(
                 service,
                 "_fetch_google_news_results",
@@ -119,7 +125,10 @@ class AdvancedWebSearchProblemTests(unittest.TestCase):
             )
             for index in range(40)
         ]
-        with patch.object(service, "_fetch_rss_results", return_value=results):
+        with (
+            patch.object(service, "_fetch_yahoo_results", return_value=[]),
+            patch.object(service, "_fetch_rss_results", return_value=results),
+        ):
             response = service.search("research evidence", max_results=100)
 
         self.assertEqual(12, len(response.results))

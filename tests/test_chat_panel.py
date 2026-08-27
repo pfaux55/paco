@@ -14,7 +14,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from PySide6.QtCore import QByteArray, QBuffer, QCoreApplication, QEvent, QIODevice, QMimeData, QPoint, QPointF, QUrl
-from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QKeyEvent
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QKeyEvent, QWheelEvent
 from PySide6.QtWidgets import QApplication, QLabel, QLineEdit
 from PySide6.QtTest import QTest
 from PySide6.QtCore import Qt
@@ -340,14 +340,37 @@ class ChatPanelTests(unittest.TestCase):
         self.assertFalse(self.panel.jump_to_latest_button.isHidden())
 
         self.panel.jump_to_latest_button.click()
-        self.app.processEvents()
+        QTest.qWait(260)
         self.assertEqual(bar.maximum(), bar.value())
         self.assertTrue(self.panel.jump_to_latest_button.isHidden())
 
         harness._pending_assistant_text += "Latest tail\n" * 40
         harness._flush_pending_stream_render()
-        self.app.processEvents()
+        QTest.qWait(260)
         self.assertEqual(bar.maximum(), bar.value())
+
+    def test_chat_wheel_scroll_animates_to_its_target(self) -> None:
+        self.panel.resize(700, 520)
+        self.panel.chat_container.setMinimumHeight(1_500)
+        self.app.processEvents()
+        bar = self.panel.chat_scroll.verticalScrollBar()
+        bar.setValue(200)
+        wheel_event = QWheelEvent(
+            QPointF(10, 10),
+            QPointF(10, 10),
+            QPoint(),
+            QPoint(0, -120),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.ScrollUpdate,
+            False,
+        )
+
+        QCoreApplication.sendEvent(self.panel.chat_scroll.viewport(), wheel_event)
+
+        self.assertTrue(wheel_event.isAccepted())
+        QTest.qWait(210)
+        self.assertGreater(bar.value(), 200)
 
 
 if __name__ == "__main__":

@@ -710,6 +710,10 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
             "Ctrl+L": self._focus_chat_composer,
             "Ctrl+O": self._choose_chat_attachments,
             "Ctrl+B": self._toggle_sidebar,
+            "Ctrl++": lambda: self._zoom_chat(1),
+            "Ctrl+Shift+=": lambda: self._zoom_chat(1),
+            "Ctrl+=": lambda: self._zoom_chat(1),
+            "Ctrl+-": lambda: self._zoom_chat(-1),
             "F2": self._begin_conversation_rename,
             "Alt+1": lambda: self._show_page(0, self.chat_nav_button),
             "Alt+2": lambda: self._show_page(1, self.agent_nav_button),
@@ -723,6 +727,7 @@ class MainWindow(ChatWindowMixin, AgentWindowMixin, VoiceWindowMixin, SettingsSt
         for sequence, callback in bindings.items():
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.activated.connect(callback)
+            shortcut.activatedAmbiguously.connect(callback)
             self._shortcuts[sequence] = shortcut
 
     def _focus_history_search(self) -> None:

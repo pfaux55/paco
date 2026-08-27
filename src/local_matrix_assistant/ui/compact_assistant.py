@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Iterable
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QSize, QThreadPool, QTimer, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QCursor, QGuiApplication, QImage
+from PySide6.QtGui import QClipboard, QCloseEvent, QCursor, QGuiApplication, QImage
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
@@ -27,6 +27,7 @@ from local_matrix_assistant.ui.brand import paco_icon, paco_mark
 from local_matrix_assistant.ui.inputs import ClipboardLineEdit
 from local_matrix_assistant.ui.task_runner import TaskRunner
 from local_matrix_assistant.ui.theme import stylesheet_for_theme
+from local_matrix_assistant.ui.widgets import SafeMarkdownLabel
 from local_matrix_assistant.ui.workers import FunctionWorker, StreamWorker
 
 
@@ -650,18 +651,38 @@ class CompactAssistantWindow(QWidget):
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(9, 7, 9, 7)
         layout.setSpacing(3)
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(6)
         heading = QLabel("YOU" if role == "user" else "Paco")
         heading.setObjectName("compactMessageRole")
-        layout.addWidget(heading)
-        body = QLabel(content)
+        header_layout.addWidget(heading)
+        header_layout.addStretch(1)
+        copy_button = QPushButton("Copy")
+        copy_button.setObjectName("messageCopyButton")
+        copy_button.setToolTip("Copy message")
+        copy_button.clicked.connect(
+            lambda _checked=False: self._copy_compact_message(content, copy_button)
+        )
+        header_layout.addWidget(copy_button)
+        layout.addLayout(header_layout)
+        body = SafeMarkdownLabel(content)
         body.setObjectName("compactMessageBody")
         body.setTextFormat(Qt.TextFormat.PlainText)
         body.setWordWrap(True)
-        body.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        body.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
         layout.addWidget(body)
         self.transcript_layout.insertWidget(self.transcript_layout.count() - 1, frame)
         QTimer.singleShot(0, self._scroll_to_latest)
         return body
+
+    @staticmethod
+    def _copy_compact_message(content: str, button: QPushButton) -> None:
+        QApplication.clipboard().setText(content, QClipboard.Mode.Clipboard)
+        button.setText("Copied")
 
     def _scroll_to_latest(self) -> None:
         bar = self.transcript_scroll.verticalScrollBar()

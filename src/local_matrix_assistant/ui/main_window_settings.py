@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import replace
 from functools import partial
 
+from PySide6.QtCore import QSignalBlocker
+
 from local_matrix_assistant.core.config import (
     normalize_chat_font_family,
     normalize_chat_font_size,
@@ -11,10 +13,39 @@ from local_matrix_assistant.core.constants import DEFAULT_ACTIVITY
 from local_matrix_assistant.core.model_catalog import RECOMMENDED_MODEL_NAMES
 from local_matrix_assistant.core.models import ModelPullProgress, ModelPullResult, StatusSnapshot
 from local_matrix_assistant.ui.workers import FunctionWorker, StreamWorker
-from local_matrix_assistant.ui.theme import normalize_theme, stylesheet_for_theme
+from local_matrix_assistant.ui.theme import (
+    chat_typography_stylesheet,
+    normalize_theme,
+    stylesheet_for_theme,
+)
 
 
 class SettingsStatusWindowMixin:
+    def _zoom_chat(self, step: int) -> None:
+        size = normalize_chat_font_size(self.config.chat_font_size + step)
+        if size == self.config.chat_font_size:
+            return
+        self.chat_panel.setStyleSheet(
+            chat_typography_stylesheet(self.config.chat_font_family, size)
+        )
+        self.config = replace(self.config, chat_font_size=size)
+        index = self.settings_panel.font_size_combo.findData(size)
+        if index >= 0:
+            blocker = QSignalBlocker(self.settings_panel.font_size_combo)
+            self.settings_panel.font_size_combo.setCurrentIndex(index)
+            del blocker
+        save_timer = getattr(self, "_theme_save_timer", None)
+        if save_timer is not None:
+            save_timer.start()
+            self._set_activity(f"Chat zoom: {size} pt.")
+            return
+        persisted = self._update_config(chat_font_size=size)
+        self._set_activity(
+            f"Chat zoom: {size} pt."
+            if persisted
+            else f"Chat zoom: {size} pt for this session."
+        )
+
     def refresh_status(self) -> None:
         if self._status_poll_inflight:
             return
@@ -400,6 +431,9 @@ class SettingsStatusWindowMixin:
         size = normalize_chat_font_size(self.settings_panel.font_size_combo.currentData())
         if family == self.config.chat_font_family and size == self.config.chat_font_size:
             return
+        chat_panel = getattr(self, "chat_panel", None)
+        if chat_panel is not None:
+            chat_panel.setStyleSheet("")
         self.setStyleSheet(stylesheet_for_theme(self.config.theme, family, size))
         self.config = replace(
             self.config,

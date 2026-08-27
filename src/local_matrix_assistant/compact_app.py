@@ -62,7 +62,7 @@ def main() -> int:
         main_window.raise_()
         main_window.activateWindow()
         if compact_window is not None:
-            compact_window.close()
+            compact_window.hide()
 
     def show_compact_mode() -> None:
         nonlocal compact_window

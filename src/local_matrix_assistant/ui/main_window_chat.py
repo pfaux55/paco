@@ -1087,9 +1087,7 @@ class ChatWindowMixin:
         self._request_assistant_response(model, None)
 
     def _resolve_web_search_query(self, user_text: str, explicit_query: str | None) -> str:
-        if explicit_query:
-            return explicit_query
-        prior_messages = self.messages
+        prior_messages = getattr(self, "messages", ())
         if (
             prior_messages
             and prior_messages[-1].role == "user"
@@ -1097,7 +1095,7 @@ class ChatWindowMixin:
         ):
             prior_messages = prior_messages[:-1]
         return WebSearchService.resolve_query(
-            user_text,
+            explicit_query or user_text,
             [message.content for message in prior_messages if message.role == "user"],
         )
 
@@ -1125,7 +1123,10 @@ class ChatWindowMixin:
         if self._cancel_requested:
             self._finish_reply_preparation_canceled("Web search canceled.")
             return
-        self._set_activity(f"Web search unavailable. Continuing without it. {message}")
+        if "none were relevant and current enough" in message.casefold():
+            self._set_activity("No relevant, current web sources were found. Continuing without them.")
+        else:
+            self._set_activity(f"Web search unavailable. Continuing without it. {message}")
         self._request_assistant_response(model, None)
 
     def _start_conversation_memory_update(

@@ -15,10 +15,10 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtCore import QRect, Qt
+from PySide6.QtCore import QEvent, QRect, Qt
 from PySide6.QtGui import QCloseEvent, QColor, QImage, QPixmap
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from local_matrix_assistant import compact_app
 from local_matrix_assistant.core.config import AppConfig
@@ -94,6 +94,23 @@ class RecordingOllama:
         return ChatStreamResult(content="Local answer")
 
 
+class DeferredStreamRunner:
+    def __init__(self) -> None:
+        self.worker = None
+        self.on_chunk = None
+        self.on_result = None
+        self.on_error = None
+
+    def start_stream(self, worker, on_chunk, on_result, on_error) -> None:
+        self.worker = worker
+        self.on_chunk = on_chunk
+        self.on_result = on_result
+        self.on_error = on_error
+
+    def close(self) -> None:
+        pass
+
+
 class CompactAssistantTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -153,6 +170,21 @@ class CompactAssistantTests(unittest.TestCase):
         QTest.keyClick(window.prompt_input, Qt.Key_V, Qt.ControlModifier)
         self.assertEqual("paste compact text", window.prompt_input.text())
         window.close()
+
+    def test_compact_message_has_working_copy_action(self) -> None:
+        window = self.build_window()
+        body = window._append_message_view("assistant", "copy compact response")
+        copy_button = body.parentWidget().findChild(QPushButton, "messageCopyButton")
+
+        self.assertIsNotNone(copy_button)
+        copy_button.click()
+
+        self.assertEqual("copy compact response", QApplication.clipboard().text())
+        self.assertEqual("Copied", copy_button.text())
+        window.close()
+        window.deleteLater()
+        QApplication.processEvents()
+        QApplication.clipboard().clear()
 
     def test_close_button_requests_process_exit(self) -> None:
         window = self.build_window()
@@ -303,6 +335,28 @@ class CompactAssistantTests(unittest.TestCase):
         self.assertIn("model failed", error_window.status_label.text())
         error_window.close()
 
+    def test_hidden_or_inactive_window_keeps_reply_running(self) -> None:
+        window = self.build_window()
+        window.available_ollama_models = ["gemma3:1b"]
+        runner = DeferredStreamRunner()
+        window.task_runner = runner
+
+        self.assertTrue(window.submit_prompt("Keep working in the background"))
+        assert runner.worker is not None
+        window.hide()
+        QApplication.sendEvent(window, QEvent(QEvent.Type.WindowDeactivate))
+
+        self.assertFalse(runner.worker.is_cancelled())
+        assert runner.on_chunk is not None
+        assert runner.on_result is not None
+        result = runner.worker.fn(runner.on_chunk, runner.worker.is_cancelled)
+        runner.on_result(result)
+
+        self.assertFalse(window.is_busy)
+        self.assertEqual("Local answer", window.messages[-1].content)
+        self.assertFalse(window.messages[-1].metadata.get("canceled", False))
+        window.close()
+
 
 class CompactLauncherTests(unittest.TestCase):
     def test_launcher_constructs_only_the_compact_window(self) -> None:
@@ -337,11 +391,13 @@ class CompactLauncherTests(unittest.TestCase):
                 return 17
 
         window = Mock()
+        main_window = Mock()
         with (
             patch.object(compact_app.AppPaths, "create", return_value=object()),
             patch.object(compact_app.AppConfig, "load", return_value=config),
             patch.object(compact_app, "QApplication", FakeApplication),
             patch.object(compact_app, "CompactAssistantWindow", return_value=window) as compact_window,
+            patch.object(compact_app, "MainWindow", return_value=main_window),
             patch.object(compact_app, "configure_windows_app_identity"),
             patch.object(compact_app, "paco_icon", return_value=object()),
             patch.object(compact_app, "QFont", return_value=object()),
@@ -349,11 +405,16 @@ class CompactLauncherTests(unittest.TestCase):
             patch.object(compact_app, "apply_windows_window_icon"),
         ):
             result = compact_app.main()
+            show_main_mode = window.main_mode_requested.connect.call_args.args[0]
+            show_main_mode()
 
         self.assertEqual(17, result)
         compact_window.assert_called_once_with(config)
         window.exit_requested.connect.assert_called_once()
         window.show.assert_called_once_with()
+        window.hide.assert_called_once_with()
+        window.close.assert_not_called()
+        main_window.show.assert_called_once_with()
 
 
 if __name__ == "__main__":

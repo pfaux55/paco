@@ -119,11 +119,11 @@ Hands-Free mode resumes listening after a complete spoken reply. A short delay p
 
 ## Web search
 
-Web search is disabled by default. Current and news queries can use account-free Google News RSS; general searches use Bing RSS. Results are ranked, deduplicated, shown with visible sources, and supplemented with bounded extraction from selected public pages.
+Web search is disabled by default. Current location-specific weather uses account-free Open-Meteo geocoding and live observations. Current and news queries can use Google News RSS. General searches use Brave Search when `BRAVE_SEARCH_API_KEY` is present, optional Google Custom Search, Yahoo web results, then Bing RSS as the final fallback. Results are ranked by query relevance before provider, deduplicated, filtered for freshness and minimum topic coverage, shown with visible sources, and supplemented with bounded extraction from selected public pages.
 
 Search requests can also fetch explicitly supplied public URLs. Paco blocks private and loopback targets, unsafe redirects, unsupported content types, oversized downloads, excessive redirect chains, and credential-bearing URLs. Extracted page content is treated as untrusted data and limited before it reaches the local model.
 
-If search fails, Paco continues with a local-only response. Optional legacy Google Custom Search support requires both `GOOGLE_SEARCH_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID` in the process environment; credentials are not saved in Paco settings or history.
+If providers fail or return only weak or stale matches, Paco reports that no suitable sources were found and continues with a local-only response. Brave Search requires `BRAVE_SEARCH_API_KEY`. Optional Google Custom Search requires both `GOOGLE_SEARCH_API_KEY` and `GOOGLE_SEARCH_ENGINE_ID`. Credentials are read from the process environment and are not saved in Paco settings or history.
 
 ## Model routing
 

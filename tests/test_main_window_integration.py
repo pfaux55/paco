@@ -16,7 +16,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from PySide6.QtCore import QCoreApplication, QMimeData, QPoint, QPointF, Qt, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QMimeData, QPoint, QPointF, Qt, QUrl
 from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QImage, QPalette
 from PySide6.QtWidgets import QApplication, QFileDialog
 from PySide6.QtTest import QTest
@@ -908,6 +908,53 @@ class MainWindowIntegrationTests(unittest.TestCase):
             raw = json.loads(conversation_path.read_text(encoding="utf-8"))
             self.assertEqual("Completed reply", raw["messages"][-1]["content"])
             self.assertNotIn("pending", raw["messages"][-1]["metadata"])
+            window.close()
+
+    def test_page_and_window_switches_do_not_cancel_an_inflight_reply(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = build_paths(Path(tmp))
+            config = AppConfig.defaults(paths)
+            config.ollama_model = "test-model"
+
+            with (
+                patch.object(MainWindow, "refresh_status", lambda _self: None),
+                patch.object(MainWindow, "showMaximized", lambda _self: None),
+                patch.object(AudioRecorder, "list_inputs", lambda _self: []),
+                patch.object(AudioPlayer, "list_outputs", lambda _self: []),
+            ):
+                window = MainWindow(paths, config)
+
+            runner = DeferredTaskRunner()
+            window.task_runner = runner
+            window._active_model_selection = ModelSelection(
+                "test-model",
+                "balanced",
+                "test",
+                automatic=False,
+            )
+            window._append_message("user", "Keep working while I switch views")
+            window._request_assistant_response("test-model", None)
+            assert runner.worker is not None
+
+            window.agent_nav_button.click()
+            QApplication.sendEvent(window, QEvent(QEvent.Type.WindowDeactivate))
+
+            self.assertEqual(1, window.page_stack.currentIndex())
+            self.assertFalse(runner.worker.is_cancelled())
+            self.assertTrue(window._awaiting_response)
+
+            assert runner.on_result is not None
+            runner.on_result(
+                (
+                    ChatStreamResult("Background reply completed"),
+                    ContextStats(1, 1, 0, 20, 1_000),
+                    {"model_name": "test-model"},
+                )
+            )
+
+            self.assertFalse(window._awaiting_response)
+            self.assertEqual("Background reply completed", window.messages[-1].content)
+            self.assertFalse(window.messages[-1].metadata.get("canceled", False))
             window.close()
 
     def test_reply_progress_reports_loading_streaming_and_stalls_then_clears(self) -> None:
@@ -1980,6 +2027,10 @@ class MainWindowIntegrationTests(unittest.TestCase):
                     "Ctrl+L",
                     "Ctrl+O",
                     "Ctrl+B",
+                    "Ctrl++",
+                    "Ctrl+Shift+=",
+                    "Ctrl+=",
+                    "Ctrl+-",
                     "Ctrl+Shift+R",
                     "Ctrl+Shift+Space",
                     "Ctrl+Shift+M",
@@ -2022,6 +2073,50 @@ class MainWindowIntegrationTests(unittest.TestCase):
 
             window._shortcuts["Ctrl+L"].activated.emit()
             self.assertEqual(0, window.page_stack.currentIndex())
+
+            original_font_size = window.config.chat_font_size
+            window._shortcuts["Ctrl++"].activated.emit()
+            self.assertEqual(original_font_size + 1, window.config.chat_font_size)
+            self.assertEqual(
+                original_font_size + 1,
+                window.settings_panel.font_size_combo.currentData(),
+            )
+            window._shortcuts["Ctrl+="].activatedAmbiguously.emit()
+            self.assertEqual(original_font_size + 2, window.config.chat_font_size)
+            window._shortcuts["Ctrl+Shift+="].activated.emit()
+            self.assertEqual(original_font_size + 3, window.config.chat_font_size)
+            window._shortcuts["Ctrl+-"].activated.emit()
+            window._shortcuts["Ctrl+-"].activated.emit()
+            window._shortcuts["Ctrl+-"].activated.emit()
+            self.assertEqual(original_font_size, window.config.chat_font_size)
+
+            window.show()
+            window.chat_panel.input_box.setFocus()
+            QCoreApplication.processEvents()
+            original_input_size = window.chat_panel.input_box.font().pointSizeF()
+            original_window_stylesheet = window.styleSheet()
+            QTest.keyClick(
+                window.chat_panel.input_box,
+                Qt.Key.Key_Equal,
+                Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+            )
+            QCoreApplication.processEvents()
+            self.assertEqual(original_font_size + 1, window.config.chat_font_size)
+            self.assertGreater(
+                window.chat_panel.input_box.font().pointSizeF(),
+                original_input_size,
+            )
+            self.assertEqual(original_window_stylesheet, window.styleSheet())
+            self.assertIn(
+                f"font-size: {original_font_size + 1}pt",
+                window.chat_panel.styleSheet(),
+            )
+            QTest.keyClick(
+                window.chat_panel.input_box,
+                Qt.Key.Key_Minus,
+                Qt.KeyboardModifier.ControlModifier,
+            )
+            self.assertEqual(original_font_size, window.config.chat_font_size)
 
             window._shortcuts["F2"].activated.emit()
             self.assertFalse(window.rename_chat_panel.isHidden())

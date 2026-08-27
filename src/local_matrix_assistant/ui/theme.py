@@ -1515,7 +1515,14 @@ def _stylesheet_for_normalized_theme(theme: str) -> str:
 @lru_cache(maxsize=256)
 def _stylesheet_for_preferences(theme: str, font_family: str, font_size: int) -> str:
     base = _stylesheet_for_normalized_theme(theme)
-    font_rules = f"""
+    return base + chat_typography_stylesheet(font_family, font_size)
+
+
+@lru_cache(maxsize=256)
+def chat_typography_stylesheet(font_family: str, font_size: int) -> str:
+    family = normalize_chat_font_family(font_family)
+    size = normalize_chat_font_size(font_size)
+    return f"""
 
 /* User-selected chat and text-entry typography. */
 QLabel#messageBody,
@@ -1526,11 +1533,10 @@ QTextEdit,
 QWidget#compactAssistant QLabel,
 QWidget#compactAssistant QLineEdit,
 QWidget#compactAssistant QPushButton {{
-    font-family: \"{font_family}\";
-    font-size: {font_size}pt;
+    font-family: \"{family}\";
+    font-size: {size}pt;
 }}
 """
-    return base + font_rules
 
 
 def stylesheet_for_theme(

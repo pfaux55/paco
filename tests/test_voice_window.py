@@ -473,7 +473,7 @@ class VoiceWindowTests(unittest.TestCase):
         self.assertIn("Voice capture canceled", harness.activities[-1])
         harness.close()
 
-    def test_voice_barge_in_cancels_stream_before_starting_microphone(self) -> None:
+    def test_voice_input_waits_without_canceling_active_response(self) -> None:
         harness = VoiceHarness()
         stream = FakeStreamWorker()
         harness._awaiting_response = True
@@ -481,16 +481,10 @@ class VoiceWindowTests(unittest.TestCase):
 
         harness._toggle_voice_mode()
 
-        self.assertTrue(stream.cancelled)
-        self.assertTrue(harness._voice_capture_pending)
+        self.assertFalse(stream.cancelled)
+        self.assertFalse(harness._voice_capture_pending)
         self.assertEqual(0, harness.recorder.start_calls)
-        self.assertEqual("Audio: Interrupting", harness.voice_panel.audio_state_value.text())
-
-        harness._awaiting_response = False
-        harness._resume_pending_voice_capture()
-
-        self.assertEqual(1, harness.recorder.start_calls)
-        self.assertTrue(harness.recorder.is_recording())
+        self.assertIn("Cancel Reply", harness.activities[-1])
         harness.close()
 
     def test_stale_synthesis_cannot_play_after_voice_capture_starts(self) -> None:
@@ -771,7 +765,7 @@ class VoiceWindowTests(unittest.TestCase):
         self.assertIn("Voice output stopped.", harness.activities)
         harness.close()
 
-    def test_voice_button_remains_available_to_interrupt_streaming(self) -> None:
+    def test_voice_button_remains_available_while_streaming(self) -> None:
         harness = VoiceHarness()
 
         harness._set_interaction_busy(True, allow_cancel=True)

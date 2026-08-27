@@ -7,12 +7,13 @@ import math
 import re
 
 from PySide6.QtCore import QTimer, Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices, QPixmap
+from PySide6.QtGui import QClipboard, QDesktopServices, QKeyEvent, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPlainTextEdit,
     QPushButton,
     QSizePolicy,
@@ -73,7 +74,33 @@ class SafeMarkdownLabel(QLabel):
     def __init__(self, text: str = "") -> None:
         super().__init__(text)
         self.setOpenExternalLinks(False)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
         self.linkActivated.connect(self._open_link)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # type: ignore[override]
+        if event.matches(QKeySequence.StandardKey.Copy) and self.hasSelectedText():
+            self._copy_selected_text()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def contextMenuEvent(self, event) -> None:  # type: ignore[override]
+        menu = QMenu(self)
+        copy_selection = menu.addAction("Copy selection")
+        copy_selection.setEnabled(self.hasSelectedText())
+        copy_all = menu.addAction("Copy text")
+        selected = menu.exec(event.globalPos())
+        if selected is copy_selection:
+            self._copy_selected_text()
+        elif selected is copy_all:
+            self._set_clipboard_text(self.text())
+
+    def _copy_selected_text(self) -> None:
+        self._set_clipboard_text(self.selectedText().replace("\u2029", "\n"))
+
+    @staticmethod
+    def _set_clipboard_text(text: str) -> None:
+        QApplication.clipboard().setText(text, QClipboard.Mode.Clipboard)
 
     def _open_link(self, href: str) -> None:
         url = QUrl(href)
@@ -219,7 +246,9 @@ class MessageContentWidget(QWidget):
         label.setObjectName("messageBody")
         label.setWordWrap(True)
         label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
         label.link_error.connect(self.link_error.emit)
         return label
@@ -370,7 +399,9 @@ class MessageBubble(QFrame):
         self.sources_label.setVisible(False)
         self.sources_label.setTextFormat(Qt.TextFormat.MarkdownText)
         self.sources_label.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.LinksAccessibleByMouse
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
         )
         self.sources_label.link_error.connect(self._show_link_error)
 
@@ -717,7 +748,7 @@ class MessageBubble(QFrame):
         )
 
     def _copy_message(self) -> None:
-        QApplication.clipboard().setText(self._message_content)
+        QApplication.clipboard().setText(self._message_content, QClipboard.Mode.Clipboard)
         self.copy_message_button.setText("Copied")
         self.copy_message_button.setEnabled(False)
         QTimer.singleShot(1200, self._restore_copy_message_button)

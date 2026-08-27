@@ -16,6 +16,7 @@ if str(SRC) not in sys.path:
 
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice, Qt
 from PySide6.QtGui import QColor, QImage, QTextDocument
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QPlainTextEdit
 
 from local_matrix_assistant.core.models import ChatMessage
@@ -248,6 +249,23 @@ class WidgetTests(unittest.TestCase):
         bubble.copy_message_button.click()
 
         self.assertEqual(content, QApplication.clipboard().text())
+
+    def test_selected_message_text_copies_with_ctrl_c(self) -> None:
+        bubble = MessageBubble(
+            ChatMessage(role="assistant", content="Copy this selected text", timestamp="now")
+        )
+        bubble.show()
+        bubble.body_label.setSelection(5, 13)
+        bubble.body_label.setFocus()
+
+        QTest.keyClick(
+            bubble.body_label,
+            Qt.Key.Key_C,
+            Qt.KeyboardModifier.ControlModifier,
+        )
+
+        self.assertEqual("this selected", QApplication.clipboard().text())
+        bubble.close()
 
     def test_message_shows_automatic_model_route(self) -> None:
         bubble = MessageBubble(
